@@ -21,18 +21,31 @@ const announcementsFile = path.join(dataDir, 'announcements.json');
 const loansFile = path.join(dataDir, 'loans.json');
 
 // Clear old data files for fresh start (comment out after first deployment)
-try {
-    if (fs.existsSync(usersFile)) fs.unlinkSync(usersFile);
-    if (fs.existsSync(announcementsFile)) fs.unlinkSync(announcementsFile);
-    if (fs.existsSync(loansFile)) fs.unlinkSync(loansFile);
-    console.log('Cleared old data files for fresh start');
-} catch (e) {
-    console.error('Error clearing data files:', e);
-}
+// COMMENTED OUT - keeping data persistent across redeployments
+// try {
+//     if (fs.existsSync(usersFile)) fs.unlinkSync(usersFile);
+//     if (fs.existsSync(announcementsFile)) fs.unlinkSync(announcementsFile);
+//     if (fs.existsSync(loansFile)) fs.unlinkSync(loansFile);
+//     console.log('Cleared old data files for fresh start');
+// } catch (e) {
+//     console.error('Error clearing data files:', e);
+// }
 
 // Helper functions to load/save data
 function loadUsers() {
-    // Start fresh with no seed users - let the user create accounts
+    if (fs.existsSync(usersFile)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+            // Normalize all stored usernames to lowercase
+            const normalized = {};
+            for (const [key, value] of Object.entries(data)) {
+                normalized[key.toLowerCase()] = value;
+            }
+            return normalized;
+        } catch (e) {
+            console.error('Error loading users:', e);
+        }
+    }
     return {};
 }
 
