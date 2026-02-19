@@ -110,11 +110,14 @@ app.post('/api/account/create', (req, res) => {
         return res.status(409).json({ error: 'User already exists' });
     }
     
-    // Store user (in production, hash password with bcrypt)
-    users[username] = { password, role: 'student', createdAt: new Date().toISOString() };
+    // First user gets admin role, others get student
+    const isFirstUser = Object.keys(users).length === 0;
+    const role = isFirstUser ? 'admin' : 'student';
+    
+    users[username] = { password, role, createdAt: new Date().toISOString() };
     saveUsers(users);
     
-    res.json({ success: true, message: 'Account created' });
+    res.json({ success: true, message: 'Account created', role });
 });
 
 // POST /api/account/login - authenticate and login user
