@@ -63,6 +63,38 @@ app.post('/api/account/login', (req, res) => {
     });
 });
 
+// GET /api/accounts - get all user accounts (admin only in frontend)
+app.get('/api/accounts', (req, res) => {
+    const accounts = Object.entries(users).map(([username, user]) => ({
+        username,
+        role: user.role || 'student',
+        createdAt: user.createdAt || new Date().toISOString()
+    }));
+    res.json({ accounts });
+});
+
+// PUT /api/account/:username/role - update user role (admin only)
+app.put('/api/account/:username/role', (req, res) => {
+    const { username } = req.params;
+    const { role } = req.body;
+    
+    if (!username || !role) {
+        return res.status(400).json({ error: 'Username and role required' });
+    }
+    
+    if (!users[username]) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Validate role
+    if (!['student', 'teacher', 'admin'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+    }
+    
+    users[username].role = role;
+    res.json({ success: true, message: `Role updated to ${role}`, username, role });
+});
+
 // Serve static files (frontend) from parent directory
 app.use(express.static(path.join(__dirname, '..')));
 
