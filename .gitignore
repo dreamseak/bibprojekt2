@@ -1,6 +1,7 @@
 node_modules/
 backend/node_modules/
 backend/accounts.db
+backend/data/
 .DS_Store
 *.log
 npm-debug.log*

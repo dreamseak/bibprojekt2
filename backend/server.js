@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -9,14 +10,82 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// In-memory user storage (for demo; persists only during session)
-// In production, use a real database like MongoDB or PostgreSQL
-const users = {
-    'dreamseak': { password: 'password', role: 'admin', createdAt: new Date().toISOString() },
-    'test': { password: 'test', role: 'student', createdAt: new Date().toISOString() }
-};
-const announcements = [];
-const loans = [];  // Shared loan records across all users
+// Data files for persistence
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const usersFile = path.join(dataDir, 'users.json');
+const announcementsFile = path.join(dataDir, 'announcements.json');
+const loansFile = path.join(dataDir, 'loans.json');
+
+// Helper functions to load/save data
+function loadUsers() {
+    if (fs.existsSync(usersFile)) {
+        try {
+            return JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+        } catch (e) {
+            console.error('Error loading users:', e);
+        }
+    }
+    // Default seed users
+    return {
+        'dreamseak': { password: 'password', role: 'admin', createdAt: new Date().toISOString() },
+        'test': { password: 'test', role: 'student', createdAt: new Date().toISOString() }
+    };
+}
+
+function saveUsers(data) {
+    try {
+        fs.writeFileSync(usersFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving users:', e);
+    }
+}
+
+function loadAnnouncements() {
+    if (fs.existsSync(announcementsFile)) {
+        try {
+            return JSON.parse(fs.readFileSync(announcementsFile, 'utf8'));
+        } catch (e) {
+            console.error('Error loading announcements:', e);
+        }
+    }
+    return [];
+}
+
+function saveAnnouncements(data) {
+    try {
+        fs.writeFileSync(announcementsFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving announcements:', e);
+    }
+}
+
+function loadLoans() {
+    if (fs.existsSync(loansFile)) {
+        try {
+            return JSON.parse(fs.readFileSync(loansFile, 'utf8'));
+        } catch (e) {
+            console.error('Error loading loans:', e);
+        }
+    }
+    return [];
+}
+
+function saveLoans(data) {
+    try {
+        fs.writeFileSync(loansFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving loans:', e);
+    }
+}
+
+// Load all data at startup
+let users = loadUsers();
+let announcements = loadAnnouncements();
+let loans = loadLoans();
 
 // API Routes
 
@@ -42,6 +111,7 @@ app.post('/api/account/create', (req, res) => {
     
     // Store user (in production, hash password with bcrypt)
     users[username] = { password, role: 'student', createdAt: new Date().toISOString() };
+    saveUsers(users);
     
     res.json({ success: true, message: 'Account created' });
 });
@@ -97,6 +167,7 @@ app.put('/api/account/:username/role', (req, res) => {
     }
     
     users[username].role = role;
+    saveUsers(users);
     res.json({ success: true, message: `Role updated to ${role}`, username, role });
 });
 
@@ -144,6 +215,7 @@ app.post('/api/announcements', (req, res) => {
     };
     
     announcements.push(announcement);
+    saveAnnouncements(announcements);
     res.json({ success: true, announcement });
 });
 
@@ -157,6 +229,7 @@ app.delete('/api/announcements/:id', (req, res) => {
     }
     
     const deleted = announcements.splice(index, 1);
+    saveAnnouncements(announcements);
     res.json({ success: true, announcement: deleted[0] });
 });
 
@@ -192,6 +265,7 @@ app.post('/api/loans', (req, res) => {
     };
     
     loans.push(loan);
+    saveLoans(loans);
     res.json({ success: true, loan });
 });
 
@@ -205,6 +279,7 @@ app.delete('/api/loans/:id', (req, res) => {
     }
     
     const deleted = loans.splice(index, 1);
+    saveLoans(loans);
     res.json({ success: true, loan: deleted[0] });
 });
 
