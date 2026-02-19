@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { Client } = require('pg');
 
 const app = express();
 
@@ -10,52 +10,62 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Initialize SQLite database
-const dbPath = path.join(__dirname, 'data.db');
-const db = new Database(dbPath);
+// Initialize PostgreSQL connection
+const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+// Connect to database
+client.connect().then(() => {
+    console.log('Connected to PostgreSQL database');
+    initializeDatabase();
+}).catch(err => {
+    console.error('Failed to connect to database:', err);
+    process.exit(1);
+});
 
 // Initialize database schema
-function initializeDatabase() {
-    // Users table
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'student',
-            createdAt TEXT NOT NULL
-        )
-    `);
-    
-    // Announcements table
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS announcements (
-            id TEXT PRIMARY KEY,
-            username TEXT NOT NULL,
-            title TEXT NOT NULL,
-            content TEXT NOT NULL,
-            createdAt TEXT NOT NULL
-        )
-    `);
-    
-    // Loans table
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS loans (
-            id TEXT PRIMARY KEY,
-            username TEXT NOT NULL COLLATE NOCASE,
-            title TEXT NOT NULL,
-            author TEXT NOT NULL,
-            borrowedAt TEXT NOT NULL
-        )
-    `);
-    
-    console.log('Database initialized at:', dbPath);
+async function initializeDatabase() {
+    try {
+        // Users table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'student',
+                "createdAt" TEXT NOT NULL
+            )
+        `);
+        
+        // Announcements table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS announcements (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                "createdAt" TEXT NOT NULL
+            )
+        `);
+        
+        // Loans table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS loans (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                title TEXT NOT NULL,
+                author TEXT NOT NULL,
+                "borrowedAt" TEXT NOT NULL
+            )
+        `);
+        
+        console.log('Database tables initialized');
+    } catch (e) {
+        console.error('Error initializing database:', e);
+    }
 }
-
-initializeDatabase();
 
 // API Routes
 
@@ -68,19 +78,21 @@ app.get('/api/version', (req, res) => {
 });
 
 // GET /api/debug/users - debug endpoint to see all users
-app.get('/api/debug/users', (req, res) => {
+app.get('/api/debug/users', async (req, res) => {
     try {
-        const users = db.prepare('SELECT username, role, createdAt FROM users').all();
-        res.json({ users, usersCount: users.length });
+        const result = await client.query('SELECT username, role, "createdAt" FROM users');
+        res.json({ users: result.rows, usersCount: result.rows.length });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
 // GET /api/debug/reset - reset all data
-app.get('/api/debug/reset', (req, res) => {
+app.get('/api/debug/reset', async (req, res) => {
     try {
-        db.exec('DELETE FROM users; DELETE FROM announcements; DELETE FROM loans;');
+        await client.query('DELETE FROM users');
+        await client.query('DELETE FROM announcements');
+        await client.query('DELETE FROM loans');
         res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -88,7 +100,7 @@ app.get('/api/debug/reset', (req, res) => {
 });
 
 // POST /api/account/create - create a new user account
-app.post('/api/account/create', (req, res) => {
+app.post('/api/account/create', async (req, res) => {
     let { username, password } = req.body;
     
     if (!username || !password) {
@@ -99,8 +111,8 @@ app.post('/api/account/create', (req, res) => {
     
     try {
         // Check if user exists
-        const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-        if (existing) {
+        const existing = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (existing.rows.length > 0) {
             return res.status(409).json({ error: 'User already exists' });
         }
         
@@ -110,8 +122,10 @@ app.post('/api/account/create', (req, res) => {
         
         console.log(`Creating account: ${username} with role: ${role}`);
         
-        db.prepare('INSERT INTO users (username, password, role, createdAt) VALUES (?, ?, ?, ?)')
-            .run(username, password, role, createdAt);
+        await client.query(
+            'INSERT INTO users (username, password, role, "createdAt") VALUES ($1, $2, $3, $4)',
+            [username, password, role, createdAt]
+        );
         
         res.json({ success: true, message: 'Account created', role });
     } catch (e) {
@@ -121,7 +135,7 @@ app.post('/api/account/create', (req, res) => {
 });
 
 // POST /api/account/login - authenticate and login user
-app.post('/api/account/login', (req, res) => {
+app.post('/api/account/login', async (req, res) => {
     let { username, password } = req.body;
     
     if (!username || !password) {
@@ -131,7 +145,9 @@ app.post('/api/account/login', (req, res) => {
     username = username.toLowerCase();  // Normalize to lowercase
     
     try {
-        const user = db.prepare('SELECT username, password, role FROM users WHERE username = ?').get(username);
+        const result = await client.query('SELECT username, password, role FROM users WHERE username = $1', [username]);
+        const user = result.rows[0];
+        
         if (!user || user.password !== password) {
             return res.status(401).json({ error: 'Invalid username or password' });
         }
@@ -151,7 +167,7 @@ app.post('/api/account/login', (req, res) => {
 });
 
 // GET /api/account/me - get current user's info
-app.get('/api/account/me', (req, res) => {
+app.get('/api/account/me', async (req, res) => {
     let username = req.query.username || req.body?.username;
     
     if (!username) {
@@ -161,7 +177,9 @@ app.get('/api/account/me', (req, res) => {
     username = username.toLowerCase();
     
     try {
-        const user = db.prepare('SELECT username, role, createdAt FROM users WHERE username = ?').get(username);
+        const result = await client.query('SELECT username, role, "createdAt" FROM users WHERE username = $1', [username]);
+        const user = result.rows[0];
+        
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -177,17 +195,17 @@ app.get('/api/account/me', (req, res) => {
 });
 
 // GET /api/accounts - get all user accounts
-app.get('/api/accounts', (req, res) => {
+app.get('/api/accounts', async (req, res) => {
     try {
-        const accounts = db.prepare('SELECT username, role, createdAt FROM users').all();
-        res.json({ accounts });
+        const result = await client.query('SELECT username, role, "createdAt" FROM users');
+        res.json({ accounts: result.rows });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
 // PUT /api/account/:username/role - update user role
-app.put('/api/account/:username/role', (req, res) => {
+app.put('/api/account/:username/role', async (req, res) => {
     let { username } = req.params;
     const { role } = req.body;
     
@@ -198,12 +216,12 @@ app.put('/api/account/:username/role', (req, res) => {
     username = username.toLowerCase();
     
     try {
-        const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-        if (!user) {
+        const result = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
         
-        db.prepare('UPDATE users SET role = ? WHERE username = ?').run(role, username);
+        await client.query('UPDATE users SET role = $1 WHERE username = $2', [role, username]);
         res.json({ success: true, message: 'Role updated' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -211,17 +229,17 @@ app.put('/api/account/:username/role', (req, res) => {
 });
 
 // GET /api/announcements - get all announcements
-app.get('/api/announcements', (req, res) => {
+app.get('/api/announcements', async (req, res) => {
     try {
-        const announcements = db.prepare('SELECT id, username, title, content, createdAt FROM announcements ORDER BY createdAt DESC').all();
-        res.json({ announcements });
+        const result = await client.query('SELECT id, username, title, content, "createdAt" FROM announcements ORDER BY "createdAt" DESC');
+        res.json({ announcements: result.rows });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
 // POST /api/announcements - create announcement
-app.post('/api/announcements', (req, res) => {
+app.post('/api/announcements', async (req, res) => {
     const { id, username, title, content } = req.body;
     
     if (!id || !username || !title || !content) {
@@ -230,8 +248,10 @@ app.post('/api/announcements', (req, res) => {
     
     try {
         const createdAt = new Date().toISOString();
-        db.prepare('INSERT INTO announcements (id, username, title, content, createdAt) VALUES (?, ?, ?, ?, ?)')
-            .run(id, username, title, content, createdAt);
+        await client.query(
+            'INSERT INTO announcements (id, username, title, content, "createdAt") VALUES ($1, $2, $3, $4, $5)',
+            [id, username, title, content, createdAt]
+        );
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -239,11 +259,11 @@ app.post('/api/announcements', (req, res) => {
 });
 
 // DELETE /api/announcements/:id - delete announcement
-app.delete('/api/announcements/:id', (req, res) => {
+app.delete('/api/announcements/:id', async (req, res) => {
     const { id } = req.params;
     
     try {
-        db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+        await client.query('DELETE FROM announcements WHERE id = $1', [id]);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -251,17 +271,17 @@ app.delete('/api/announcements/:id', (req, res) => {
 });
 
 // GET /api/loans - get all loaned books
-app.get('/api/loans', (req, res) => {
+app.get('/api/loans', async (req, res) => {
     try {
-        const loans = db.prepare('SELECT id, username, title, author, borrowedAt FROM loans').all();
-        res.json({ loans });
+        const result = await client.query('SELECT id, username, title, author, "borrowedAt" FROM loans');
+        res.json({ loans: result.rows });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
 // POST /api/loans - create loan record
-app.post('/api/loans', (req, res) => {
+app.post('/api/loans', async (req, res) => {
     const { id, username, title, author } = req.body;
     
     if (!id || !username || !title || !author) {
@@ -270,8 +290,10 @@ app.post('/api/loans', (req, res) => {
     
     try {
         const borrowedAt = new Date().toISOString();
-        db.prepare('INSERT INTO loans (id, username, title, author, borrowedAt) VALUES (?, ?, ?, ?, ?)')
-            .run(id, username.toLowerCase(), title, author, borrowedAt);
+        await client.query(
+            'INSERT INTO loans (id, username, title, author, "borrowedAt") VALUES ($1, $2, $3, $4, $5)',
+            [id, username.toLowerCase(), title, author, borrowedAt]
+        );
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -279,11 +301,11 @@ app.post('/api/loans', (req, res) => {
 });
 
 // DELETE /api/loans/:id - return loaned book
-app.delete('/api/loans/:id', (req, res) => {
+app.delete('/api/loans/:id', async (req, res) => {
     const { id } = req.params;
     
     try {
-        db.prepare('DELETE FROM loans WHERE id = ?').run(id);
+        await client.query('DELETE FROM loans WHERE id = $1', [id]);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -302,6 +324,6 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Database: ${dbPath}`);
+    console.log(`Database URL: ${process.env.DATABASE_URL ? 'Configured' : 'Not set - using in-memory mode'}`);
 });
 
