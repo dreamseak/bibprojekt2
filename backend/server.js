@@ -24,7 +24,13 @@ const loansFile = path.join(dataDir, 'loans.json');
 function loadUsers() {
     if (fs.existsSync(usersFile)) {
         try {
-            return JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+            let data = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+            // Normalize any existing keys to lowercase
+            const normalized = {};
+            for (const [key, value] of Object.entries(data)) {
+                normalized[key.toLowerCase()] = value;
+            }
+            return normalized;
         } catch (e) {
             console.error('Error loading users:', e);
         }
