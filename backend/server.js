@@ -20,16 +20,15 @@ const usersFile = path.join(dataDir, 'users.json');
 const announcementsFile = path.join(dataDir, 'announcements.json');
 const loansFile = path.join(dataDir, 'loans.json');
 
-// Clear old data files for fresh start (comment out after first deployment)
-// COMMENTED OUT - keeping data persistent across redeployments
-// try {
-//     if (fs.existsSync(usersFile)) fs.unlinkSync(usersFile);
-//     if (fs.existsSync(announcementsFile)) fs.unlinkSync(announcementsFile);
-//     if (fs.existsSync(loansFile)) fs.unlinkSync(loansFile);
-//     console.log('Cleared old data files for fresh start');
-// } catch (e) {
-//     console.error('Error clearing data files:', e);
-// }
+// Clear old data files for fresh start (temporarily enabled for clean deployment)
+try {
+    if (fs.existsSync(usersFile)) fs.unlinkSync(usersFile);
+    if (fs.existsSync(announcementsFile)) fs.unlinkSync(announcementsFile);
+    if (fs.existsSync(loansFile)) fs.unlinkSync(loansFile);
+    console.log('Cleared old data files for fresh start');
+} catch (e) {
+    console.error('Error clearing data files:', e);
+}
 
 // Helper functions to load/save data
 function loadUsers() {
