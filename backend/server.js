@@ -146,7 +146,7 @@ startServer();
 async function queryWithRetry(query, params = [], maxRetries = 2) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            return await queryWithRetry(query, params);
+            return await pool.query(query, params);
         } catch (e) {
             if (attempt === maxRetries - 1) throw e;
             console.warn(`Query failed (attempt ${attempt + 1}), retrying...`);
