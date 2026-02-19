@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Bücher ausleihen aus der Bibliothek">
+    <title>📚 Bibliothek</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">📚 Meine Leseabenteuer</div>
+            <ul class="nav-links">
+                <li><a href="index.html">Startseite</a></li>
+                <li><a href="borrow.html">Bibliothek</a></li>
+                <li><a href="read.html">Gelesene Bücher</a></li>
+                <li><a href="account.html">Konto</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <header class="hero" id="library-hero">
+        <div class="container">
+            <h1>📚 Bibliothek - Bücher ausleihen</h1>
+            <p>Finde großartige Bücher zum Ausleihen in unserer Bibliothek!</p>
+        </div>
+    </header>
+
+    <section class="library" id="library">
+        <div class="container">
+            <div class="library-search">
+                <input type="search" id="librarySearch" placeholder="Nach Titel oder Autor suchen..." aria-label="Bibliothek durchsuchen">
+            </div>
+            <div class="library-grid" id="libraryBooks">
+                <!-- Library books will be displayed here by script.js -->
+            </div>
+            <div id="libraryPagination" class="library-pagination" aria-label="Library pagination"></div>
+        </div>
+        <!-- placeholder for dynamically generated borrow popup -->
+        <!-- element created in JavaScript when openBorrowModal is called -->
+    </section>
+
+
+    <footer class="footer">
+        <div class="container">
+            <p>🌈 Viel Spaß beim Lesen! Entdecke weiterhin neue Welten durch Bücher! 🌈</p>
+            <p>&copy; 2026 Meine Leseabenteuer</p>
+        </div>
+    </footer>
+    <script src="script.js"></script>
+</body>
+</html>

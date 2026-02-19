@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Meine Lese-Checkliste">
+    <title>📚 Meine Leseabenteuer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">📚 Meine Leseabenteuer</div>
+            <ul class="nav-links">
+                <li><a href="#home">Startseite</a></li>
+                <li><a href="borrow.html">Bibliothek</a></li>
+                <li><a href="read.html">Gelesene Bücher</a></li>
+                <li><a href="account.html">Konto</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <header class="hero" id="home">
+        <div class="container">
+            <h1>🌟 Verfolge deine Lese-Reise!</h1>
+            <p>Markiere gelesene Bücher und entdecke neue zum Ausleihen</p>
+            <p id="loanCount" class="loan-counter"></p>
+        </div>
+    </header>
+
+    <section class="announcements container" aria-label="Ankündigungen">
+        <div id="announcementsContainer"></div>
+    </section>
+
+    <!-- Events: opened via button to keep homepage compact -->
+
+    <section class="welcome container">
+        <div class="welcome-inner">
+
+            <h2>Willkommen zu deinem Leseabenteuer</h2>
+            <p class="lead">Entdecke, verfolge und leihe Bücher — alles an einem freundlichen Ort. Egal, ob du eine Leseliste erstellst, bereits gelesene Bücher festhältst oder in unserer Bibliothek stöberst: Wir machen Lesen einfach und schön.</p>
+
+            <div class="welcome-ctas">
+                <a class="btn btn-cta" href="borrow.html">Zur Bibliothek</a>
+                <a class="btn btn-cta outline" href="read.html">Meine gelesenen Bücher</a>
+                <button class="btn btn-cta" onclick="openEventsModal()">📅 Ereignisse</button>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-emoji">✅</div>
+                    <h3>Fortschritt verfolgen</h3>
+                    <p>Markiere schnell Bücher als gelesen und behalte eine übersichtliche Historie.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-emoji">🔎</div>
+                    <h3>Neue Titel entdecken</h3>
+                    <p>Suche in unserer Bibliothek oder stöbere nach Empfehlungen für dein nächstes Buch.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-emoji">💾</div>
+                    <h3>Speichern & Verwalten</h3>
+                    <p>Deine Liste wird lokal gespeichert — hinzufügen, bearbeiten und verwalten ohne Aufwand.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Library moved to borrow.html -->
+
+    <footer class="footer">
+        <div class="container">
+            <p>🌈 Viel Spaß beim Lesen! Entdecke weiterhin neue Welten durch Bücher! 🌈</p>
+            <p>&copy; 2026 My Reading Adventure</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

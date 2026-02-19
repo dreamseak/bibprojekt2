@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Gelesene Bücher">
+    <title>📚 Gelesene Bücher</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">📚 Meine Leseabenteuer</div>
+            <ul class="nav-links">
+                <li><a href="index.html">Startseite</a></li>
+                <li><a href="borrow.html">Bibliothek</a></li>
+                <li><a href="read.html">Gelesene Bücher</a></li>
+                <li><a href="account.html">Konto</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+         <section class="read-books">
+                <section class="my-books" id="my-books">
+                    <div class="container">
+                        <h2>📖 Meine Leseliste</h2>
+
+                        <div class="add-book-form">
+                            <h3>Neues Buch hinzufügen</h3>
+                            <input type="text" id="bookTitle" placeholder="Buchtitel" maxlength="50">
+                            <input type="text" id="bookAuthor" placeholder="Autor" maxlength="30">
+                            <button class="btn btn-add" onclick="addBook()">+ Buch hinzufügen</button>
+                        </div>
+
+                        <div class="books-container">
+                            <div id="booksList" class="books-list">
+                                <!-- Books will be added here -->
+                            </div>
+                        </div>
+
+                        <div class="stats">
+                            <p>📊 Gelesene Bücher: <span id="booksRead">0</span></p>
+                        </div>
+
+                        <div class="loaned-section">
+                            <h3>📚 Ausgeliehene Bücher</h3>
+                            <div id="loanedList" class="books-list">
+                                <!-- Loaned books for current user will appear here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>🌈 Viel Spaß beim Lesen!</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

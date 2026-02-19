@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konto – Meine Leseabenteuer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">📚 Meine Leseabenteuer</div>
+            <ul class="nav-links">
+                <li><a href="index.html">Startseite</a></li>
+                <li><a href="borrow.html">Bibliothek</a></li>
+                <li><a href="read.html">Gelesene Bücher</a></li>
+                <li><a href="account.html">Konto</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <section class="container account-section">
+        <h1>🔑 Konto</h1>
+        <div id="accountArea">
+            <!-- content will be injected by script -->
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>🌈 Viel Spaß beim Lesen! Entdecke weiterhin neue Welten durch Bücher! 🌈</p>
+            <p>&copy; 2026 My Reading Adventure</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script>
+        // helpers to switch between login/register forms
+        function showSection(section) {
+            const login = document.getElementById('loginSection');
+            const reg = document.getElementById('registerSection');
+            if (section === 'register') {
+                login.style.display = 'none';
+                reg.style.display = 'block';
+            } else {
+                login.style.display = 'block';
+                reg.style.display = 'none';
+            }
+        }
+
+        function buildLoginRegister() {
+            // create two simple forms inside accountArea
+            const area = document.getElementById('accountArea');
+            area.innerHTML = `
+                <div class="account-card">
+                    <div id="loginSection">
+                        <h2>Anmelden</h2>
+                        <div class="form-group">
+                            <input id="loginUser" type="text" placeholder="Benutzername">
+                        </div>
+                        <div class="form-group">
+                            <input id="loginPass" type="password" placeholder="Passwort">
+                        </div>
+                        <button class="btn btn-cta" onclick="loginAccount(document.getElementById('loginUser').value, document.getElementById('loginPass').value)">Anmelden</button>
+                        <p>Kein Konto? <a href="#" onclick="showSection('register');return false;">Registrieren</a></p>
+                    </div>
+                    <div id="registerSection" style="display:none;">
+                        <h2>Registrieren</h2>
+                        <div class="form-group">
+                            <input id="regUser" type="text" placeholder="Benutzername">
+                        </div>
+                        <div class="form-group">
+                            <input id="regPass" type="password" placeholder="Passwort">
+                        </div>
+                        <button class="btn btn-cta" onclick="if(createAccount(document.getElementById('regUser').value, document.getElementById('regPass').value)) showSection('login');">Registrieren</button>
+                        <p>Bereits ein Konto? <a href="#" onclick="showSection('login');return false;">Anmelden</a></p>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            loadAccount();
+            const area = document.getElementById('accountArea');
+            if (currentUser) {
+                area.innerHTML = `
+                    <div class="account-card">
+                        <p>👋 Angemeldet als <strong>${currentUser}</strong></p>
+                        <div class="button-row">
+                            <button class="btn btn-cta" onclick="logoutAccount()">Abmelden</button>
+                        </div>
+                    </div>
+                    ${currentUserRole === 'teacher' ? `
+                        <section class="teacher-actions">
+                            <h3>Lehrerbereich</h3>
+                            <p class="muted">Verwalte deine Klassen und Schülergruppen.</p>
+                            <div class="teacher-row">
+                                <button class="btn btn-cta" onclick="openManageGroupsModal()">Gruppen verwalten</button>
+                            </div>
+                        </section>
+                    ` : ''}
+                    ${currentUserRole === 'admin' ? `
+                        <section class="admin-actions">
+                            <h3>Adminbereich</h3>
+                            <p class="muted">Verwalte Ankündigungen und systemweite Inhalte.</p>
+                            <div class="teacher-row">
+                                <button class="btn btn-cta" onclick="openManageAnnouncementsModal()">Ankündigungen verwalten</button>
+                                <button class="btn btn-cta" onclick="openCreateEventModal()">Ereignis erstellen</button>
+                                <button class="btn btn-cta" onclick="openManageUsersModal()">Benutzer verwalten</button>
+                            </div>
+                        </section>
+                    ` : ''}
+                `;
+            } else {
+                buildLoginRegister();
+                showSection('login');
+            }
+        });
+    </script>
+</body>
+</html>

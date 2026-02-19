@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 Buch ausleihen</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Comic Sans MS', 'Trebuchet MS', cursive, sans-serif;
+            background: linear-gradient(135deg, #FFE5F1 0%, #FFF9E1 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .form-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h2 {
+            color: #845EC2;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: bold;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #FFC75F;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #845EC2;
+            box-shadow: 0 0 0 3px rgba(132, 94, 194, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.8rem;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .btn-cancel {
+            border: 2px solid #FFC75F;
+            background: transparent;
+            color: #333;
+        }
+
+        .btn-cancel:hover {
+            background: #FFC75F;
+            transform: translateY(-2px);
+        }
+
+        .btn-confirm {
+            background: linear-gradient(135deg, #FF6B9D, #845EC2);
+            color: white;
+            border: none;
+        }
+
+        .btn-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 157, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h2>📚 Buch ausleihen</h2>
+        <div class="form-group">
+            <label for="borrowName">Name:</label>
+            <input type="text" id="borrowName" placeholder="Dein Name" maxlength="50">
+        </div>
+        <div class="form-group">
+            <label for="borrowGrade">Klassenstufe/Klasse:</label>
+            <input type="text" id="borrowGrade" placeholder="z.B. 7a oder 8" maxlength="20">
+        </div>
+        <div class="form-group">
+            <label for="borrowStartDate">Von (Datum):</label>
+            <input type="date" id="borrowStartDate">
+        </div>
+        <div class="form-group">
+            <label for="borrowEndDate">Bis (Datum):</label>
+            <input type="date" id="borrowEndDate">
+        </div>
+        <div class="button-group">
+            <button class="btn-cancel" onclick="cancelBorrow()">Abbrechen</button>
+            <button class="btn-confirm" onclick="saveBorrow()">Ausleihen</button>
+        </div>
+    </div>
+    <script>
+        let bookId = null;
+
+        window.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            bookId = params.get('bookId');
+            const today = new Date().toISOString().split('T')[0];
+            const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            document.getElementById('borrowStartDate').value = today;
+            document.getElementById('borrowEndDate').value = twoWeeksLater;
+            document.getElementById('borrowName').focus();
+        });
+
+        function cancelBorrow() {
+            // if inside iframe, notify parent to close modal
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'cancel' }, '*');
+            }
+        }
+
+        function saveBorrow() {
+            const name = document.getElementById('borrowName').value.trim();
+            const grade = document.getElementById('borrowGrade').value.trim();
+            const startDate = document.getElementById('borrowStartDate').value;
+            const endDate = document.getElementById('borrowEndDate').value;
+
+            if (!name || !grade || !startDate || !endDate) {
+                alert('⚠️ Bitte alle Felder ausfüllen!');
+                return;
+            }
+
+            if (new Date(endDate) <= new Date(startDate)) {
+                alert('⚠️ Rückgabedatum muss nach Ausleihsdatum liegen!');
+                return;
+            }
+
+            const borrowInfo = {
+                bookId: bookId,
+                name: name,
+                grade: grade,
+                startDate: startDate,
+                endDate: endDate,
+                borrowedAt: new Date().toISOString()
+            };
+
+            let borrowHistory = JSON.parse(localStorage.getItem('borrowHistory')) || [];
+            borrowHistory.push(borrowInfo);
+            localStorage.setItem('borrowHistory', JSON.stringify(borrowHistory));
+
+            let borrowedBooks = JSON.parse(localStorage.getItem('borrowedBooks')) || [];
+            // migrate old array-of-ids format if necessary
+            if (borrowedBooks.length && (typeof borrowedBooks[0] !== 'object' || borrowedBooks[0] === null)) {
+                borrowedBooks = borrowedBooks.map(id => ({id, user: ''}));
+            }
+            if (!borrowedBooks.some(b => b.id === bookId)) {
+                borrowedBooks.push({id: bookId, user: ''});
+                localStorage.setItem('borrowedBooks', JSON.stringify(borrowedBooks));
+            }
+
+            alert('🎉 Buch erfolgreich ausgeliehen! Viel Spaß beim Lesen!');
+
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'borrowed', bookId: bookId }, '*');
+            }
+        }
+    </script>
+</body>
+</html>
