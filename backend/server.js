@@ -41,11 +41,13 @@ function loadUsers() {
             for (const [key, value] of Object.entries(data)) {
                 normalized[key.toLowerCase()] = value;
             }
+            console.log(`Loaded users from file:`, Object.keys(normalized).map(u => ({ username: u, role: normalized[u].role })));
             return normalized;
         } catch (e) {
             console.error('Error loading users:', e);
         }
     }
+    console.log('No users file found - starting with empty users object');
     return {};
 }
 
@@ -146,9 +148,11 @@ app.post('/api/account/create', (req, res) => {
     
     // Only DreamSeak gets admin role, everyone else is student
     const role = username === 'dreamseak' ? 'admin' : 'student';
+    console.log(`Creating account: ${username} with role: ${role}`);
     
     users[username] = { password, role, createdAt: new Date().toISOString() };
     saveUsers(users);
+    console.log(`All users after creation:`, Object.keys(users).map(u => ({ username: u, role: users[u].role })));
     
     res.json({ success: true, message: 'Account created', role });
 });
@@ -166,6 +170,8 @@ app.post('/api/account/login', (req, res) => {
     if (!user || user.password !== password) {
         return res.status(401).json({ error: 'Invalid username or password' });
     }
+    
+    console.log(`Login: ${username} has role: ${user.role}`);
     
     // Return user info and role
     res.json({
