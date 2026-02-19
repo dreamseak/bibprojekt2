@@ -10,8 +10,8 @@ COPY . .
 # Install http-server globally to serve static files
 RUN npm install -g http-server
 
-# Expose port (Railway/Render will assign the port via environment variable)
-EXPOSE 3000
+# Expose port
+EXPOSE 8080
 
-# Start the static file server
-CMD ["http-server", "-p", "3000", "-g"]
+# Start the static file server on the port provided by Railway (defaults to 8080)
+CMD ["sh", "-c", "http-server -p ${PORT:-8080}"]
