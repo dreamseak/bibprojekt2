@@ -234,7 +234,8 @@ function exportAccountData() {
 // Initialize the page
 window.addEventListener('DOMContentLoaded', function() {
     loadAccount();
-    checkAppVersionOnLoad();
+    // version check disabled on static deployments without backend API
+    // checkAppVersionOnLoad();
     if (document.getElementById('booksList')) displayMyBooks();
     if (document.getElementById('loanedList')) displayLoanedBooks();
     if (document.getElementById('announcementsContainer')) displayAnnouncements();
