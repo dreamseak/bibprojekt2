@@ -22,24 +22,8 @@ const loansFile = path.join(dataDir, 'loans.json');
 
 // Helper functions to load/save data
 function loadUsers() {
-    if (fs.existsSync(usersFile)) {
-        try {
-            let data = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-            // Normalize any existing keys to lowercase
-            const normalized = {};
-            for (const [key, value] of Object.entries(data)) {
-                normalized[key.toLowerCase()] = value;
-            }
-            return normalized;
-        } catch (e) {
-            console.error('Error loading users:', e);
-        }
-    }
-    // Default seed users
-    return {
-        'dreamseak': { password: 'password', role: 'admin', createdAt: new Date().toISOString() },
-        'test': { password: 'test', role: 'student', createdAt: new Date().toISOString() }
-    };
+    // Start fresh with no seed users - let the user create accounts
+    return {};
 }
 
 function saveUsers(data) {
