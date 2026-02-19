@@ -120,6 +120,17 @@ app.get('/api/debug/users', (req, res) => {
     res.json({ users: usersInfo, usersCount: usersInfo.length });
 });
 
+// GET /api/debug/reset - reset all data (temporary)
+app.get('/api/debug/reset', (req, res) => {
+    users = {};
+    announcements = [];
+    loans = [];
+    saveUsers(users);
+    saveAnnouncements(announcements);
+    saveLoans(loans);
+    res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
+});
+
 // POST /api/account/create - create a new user account
 app.post('/api/account/create', (req, res) => {
     let { username, password } = req.body;
