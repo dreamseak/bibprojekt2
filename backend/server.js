@@ -110,9 +110,8 @@ app.post('/api/account/create', (req, res) => {
         return res.status(409).json({ error: 'User already exists' });
     }
     
-    // First user gets admin role, others get student
-    const isFirstUser = Object.keys(users).length === 0;
-    const role = isFirstUser ? 'admin' : 'student';
+    // Only DreamSeak gets admin role, everyone else is student
+    const role = username === 'dreamseak' ? 'admin' : 'student';
     
     users[username] = { password, role, createdAt: new Date().toISOString() };
     saveUsers(users);
