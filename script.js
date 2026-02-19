@@ -109,6 +109,22 @@ function loadBorrowedBooks() {
     borrowedBooks = raw;
 }
 
+// Fetch borrowed books from server (shared state)
+async function fetchBorrowedBooksFromServer() {
+    try {
+        const res = await fetch(API_URL + '/api/loans');
+        if (res.ok) {
+            const data = await res.json();
+            borrowedBooks = data.loans || [];
+            localStorage.setItem('borrowedBooks', JSON.stringify(borrowedBooks));
+            return;
+        }
+    } catch (e) {
+        // fallback to localStorage on network error
+    }
+    loadBorrowedBooks();
+}
+
 // initially load global list
 loadBorrowedBooks();
 
@@ -201,13 +217,21 @@ function loadAccount() {
     if (savedUser) {
         currentUser = savedUser;
         myBooks = [];
-        // Grant super-admin privileges to the specific account name
-        if (String(savedUser).toLowerCase() === 'dreamseak') {
-            currentUserRole = 'admin';
-        } else {
-            currentUserRole = 'student';
-        }
-        // user's own list only; global state will be reloaded separately
+        // Fetch role from server; fallback to defaults
+        fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(savedUser))
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data && data.role) {
+                    currentUserRole = data.role;
+                } else {
+                    // Fallback: grant super-admin to dreamseak, student to everyone else
+                    currentUserRole = String(savedUser).toLowerCase() === 'dreamseak' ? 'admin' : 'student';
+                }
+            })
+            .catch(e => {
+                // Fallback if server unavailable
+                currentUserRole = String(savedUser).toLowerCase() === 'dreamseak' ? 'admin' : 'student';
+            });
     }
     // always refresh global borrowedBooks after possible login status change
     loadBorrowedBooks();
@@ -261,12 +285,24 @@ window.addEventListener('DOMContentLoaded', function() {
     loadAccount();
     checkAppVersionOnLoad();
     
+    // Fetch loaned books from server (shared state)
+    fetchBorrowedBooksFromServer();
+    
     // Refresh role when page comes back into focus (e.g., user switches tabs)
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden && currentUser) {
             refreshCurrentUserRole();
+            fetchBorrowedBooksFromServer();  // Also refresh loans when returning to tab
+            displayAnnouncements();  // Refresh announcements
         }
     });
+    
+    // Auto-refresh announcements every 10 seconds so all users see new ones
+    setInterval(() => {
+        if (document.getElementById('announcementsContainer')) {
+            displayAnnouncements();
+        }
+    }, 10000);
     
     if (document.getElementById('booksList')) displayMyBooks();
     if (document.getElementById('loanedList')) displayLoanedBooks();
@@ -1370,6 +1406,17 @@ function saveBorrow() {
     if (!borrowedBooks.some(b => String(b.id) === normalizedId)) {
         borrowedBooks.push({ id: normalizedId, user: currentUser || '', endDate: endDate });
         saveBorrowedBooks();
+        
+        // Also save to server
+        try {
+            fetch(API_URL + '/api/loans', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: normalizedId, user: currentUser || '', endDate: endDate })
+            }).catch(e => console.error('Error saving loan to server:', e));
+        } catch (e) {
+            console.error('Error posting loan:', e);
+        }
     }
 
     alert('🎉 Buch erfolgreich ausgeliehen! Viel Spaß beim Lesen!');
@@ -1967,6 +2014,15 @@ function returnBook(id) {
     if (!confirm('Bist du sicher, dass du dieses Buch zurückgibst?')) return;
     borrowedBooks.splice(idx, 1);
     saveBorrowedBooks();
+    
+    // Also delete from server
+    try {
+        fetch(API_URL + '/api/loans/' + id, { method: 'DELETE' })
+            .catch(e => console.error('Error deleting loan from server:', e));
+    } catch (e) {
+        console.error('Error deleting loan:', e);
+    }
+    
     // remove from borrowHistory? keep history but optionally mark returnedAt
     const hist = JSON.parse(localStorage.getItem('borrowHistory') || '[]');
     // try to mark latest matching history entry with returnedAt
@@ -2004,6 +2060,15 @@ function forceReturnBook(id) {
     if (!confirm('Als Lehrkraft dieses Buch zurückgeben (für den/die Ausleiher/in)?')) return;
     const removed = borrowedBooks.splice(idx, 1)[0];
     saveBorrowedBooks();
+    
+    // Also delete from server
+    try {
+        fetch(API_URL + '/api/loans/' + id, { method: 'DELETE' })
+            .catch(e => console.error('Error deleting loan from server:', e));
+    } catch (e) {
+        console.error('Error deleting loan:', e);
+    }
+    
     // mark in history
     const hist = JSON.parse(localStorage.getItem('borrowHistory') || '[]');
     for (let i = hist.length - 1; i >= 0; i--) {

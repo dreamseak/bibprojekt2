@@ -11,8 +11,12 @@ app.use(bodyParser.json());
 
 // In-memory user storage (for demo; persists only during session)
 // In production, use a real database like MongoDB or PostgreSQL
-const users = {};
+const users = {
+    'dreamseak': { password: 'password', role: 'admin', createdAt: new Date().toISOString() },
+    'test': { password: 'test', role: 'student', createdAt: new Date().toISOString() }
+};
 const announcements = [];
+const loans = [];  // Shared loan records across all users
 
 // API Routes
 
@@ -154,6 +158,54 @@ app.delete('/api/announcements/:id', (req, res) => {
     
     const deleted = announcements.splice(index, 1);
     res.json({ success: true, announcement: deleted[0] });
+});
+
+// GET /api/loans - get all loan records (shared across all users)
+app.get('/api/loans', (req, res) => {
+    // Remove expired loans
+    const now = new Date();
+    const activeLoans = loans.filter(l => {
+        if (!l.endDate) return true;
+        return new Date(l.endDate) > now;
+    });
+    res.json({ loans: activeLoans });
+});
+
+// POST /api/loans - create a new loan record
+app.post('/api/loans', (req, res) => {
+    const { id, user, endDate } = req.body;
+    
+    if (!id || !user) {
+        return res.status(400).json({ error: 'Book ID and user required' });
+    }
+    
+    // Check if already loaned
+    if (loans.some(l => String(l.id) === String(id) && (!l.endDate || new Date(l.endDate) > new Date()))) {
+        return res.status(409).json({ error: 'Book already loaned' });
+    }
+    
+    const loan = {
+        id: String(id),
+        user,
+        endDate: endDate || null,
+        createdAt: new Date().toISOString()
+    };
+    
+    loans.push(loan);
+    res.json({ success: true, loan });
+});
+
+// DELETE /api/loans/:id - return a loaned book
+app.delete('/api/loans/:id', (req, res) => {
+    const { id } = req.params;
+    const index = loans.findIndex(l => String(l.id) === String(id));
+    
+    if (index === -1) {
+        return res.status(404).json({ error: 'Loan record not found' });
+    }
+    
+    const deleted = loans.splice(index, 1);
+    res.json({ success: true, loan: deleted[0] });
 });
 
 // Serve static files (frontend) from parent directory
