@@ -115,7 +115,16 @@ async function fetchBorrowedBooksFromServer() {
         const res = await fetch(API_URL + '/api/loans');
         if (res.ok) {
             const data = await res.json();
-            borrowedBooks = data.loans || [];
+            // Normalize backend loan format to frontend format
+            // Backend sends: {id, username, title, author}
+            // Frontend expects: {id, user, endDate}
+            borrowedBooks = (data.loans || []).map(loan => ({
+                id: String(loan.id),
+                user: loan.username || '',
+                endDate: loan.endDate || null,
+                title: loan.title || '',
+                author: loan.author || ''
+            }));
             localStorage.setItem('borrowedBooks', JSON.stringify(borrowedBooks));
             return;
         }
