@@ -212,26 +212,27 @@ function logoutAccount() {
 }
 
 // Load account from localStorage/API
-function loadAccount() {
+async function loadAccount() {
     const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
         currentUser = savedUser;
         myBooks = [];
         // Fetch role from server; fallback to defaults
-        fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(savedUser))
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
+        try {
+            const r = await fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(savedUser));
+            if (r.ok) {
+                const data = await r.json();
                 if (data && data.role) {
                     currentUserRole = data.role;
                 } else {
-                    // Fallback: grant super-admin to dreamseak, student to everyone else
-                    currentUserRole = String(savedUser).toLowerCase() === 'dreamseak' ? 'admin' : 'student';
+                    currentUserRole = 'student';
                 }
-            })
-            .catch(e => {
-                // Fallback if server unavailable
-                currentUserRole = String(savedUser).toLowerCase() === 'dreamseak' ? 'admin' : 'student';
-            });
+            } else {
+                currentUserRole = 'student';
+            }
+        } catch (e) {
+            currentUserRole = 'student';
+        }
     }
     // always refresh global borrowedBooks after possible login status change
     loadBorrowedBooks();
@@ -281,8 +282,8 @@ function exportAccountData() {
 }
 
 // Initialize the page
-window.addEventListener('DOMContentLoaded', function() {
-    loadAccount();
+window.addEventListener('DOMContentLoaded', async function() {
+    await loadAccount();
     checkAppVersionOnLoad();
     
     // Fetch loaned books from server (shared state)
