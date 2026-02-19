@@ -110,6 +110,16 @@ app.get('/api/version', (req, res) => {
     });
 });
 
+// GET /api/debug/users - debug endpoint to see all users (temporary)
+app.get('/api/debug/users', (req, res) => {
+    const usersInfo = Object.entries(users).map(([username, user]) => ({
+        username,
+        role: user.role,
+        hasPassword: !!user.password
+    }));
+    res.json({ users: usersInfo, usersCount: usersInfo.length });
+});
+
 // POST /api/account/create - create a new user account
 app.post('/api/account/create', (req, res) => {
     let { username, password } = req.body;
