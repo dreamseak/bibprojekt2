@@ -42,10 +42,14 @@ function showVersionBanner(localVer, remoteVer) {
 
 // Compare local and remote versions on load and show a non-blocking banner if they differ.
 async function checkAppVersionOnLoad() {
-    const remote = await fetchRemoteVersion();
-    if (!remote || !remote.version) return; // couldn't determine remote version
-    if (remote.version !== LOCAL_APP_VERSION) {
-        showVersionBanner(LOCAL_APP_VERSION, remote.version);
+    try {
+        const remote = await fetchRemoteVersion();
+        if (!remote || !remote.version) return; // couldn't determine remote version
+        if (remote.version !== LOCAL_APP_VERSION) {
+            showVersionBanner(LOCAL_APP_VERSION, remote.version);
+        }
+    } catch (e) {
+        // silently ignore version check errors (e.g. if backend is offline or doesn't expose API)
     }
 }
 // Returns the translated text or the original if translation fails
