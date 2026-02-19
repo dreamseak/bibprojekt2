@@ -188,6 +188,7 @@ async function loginAccount(username, password) {
         // Store original username casing for display, but use the normalized one for lookups
         currentUser = username;  // Keep original casing
         currentUserRole = data.role || 'student';
+        console.log('[LOGIN] Frontend received role:', currentUserRole, 'from API response:', data);
         myBooks = [];
         localStorage.setItem('currentUser', username);  // Store original casing
         alert('✓ Willkommen, ' + username + '!');
@@ -225,14 +226,18 @@ async function loadAccount() {
                 const data = await r.json();
                 if (data && data.role) {
                     currentUserRole = data.role;
+                    console.log('[LOAD] Set currentUserRole to:', currentUserRole, 'from /api/account/me response:', data);
                 } else {
                     currentUserRole = 'student';
+                    console.log('[LOAD] No role in response, defaulting to student');
                 }
             } else {
                 currentUserRole = 'student';
+                console.log('[LOAD] API returned error, defaulting to student');
             }
         } catch (e) {
             currentUserRole = 'student';
+            console.log('[LOAD] Error fetching role, defaulting to student:', e);
         }
     }
     // always refresh global borrowedBooks after possible login status change
