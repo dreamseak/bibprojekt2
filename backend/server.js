@@ -10,11 +10,17 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Data file path (will persist across requests, but not across container restarts)
-const dataDir = '/tmp';  // Use /tmp which is more persistent than memory on Railway
+// Create data directory if it doesn't exist
+const dataDir = path.join(__dirname, '..', 'data');  // Use ./data directory in app
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
 const usersFile = path.join(dataDir, 'users.json');
 const announcementsFile = path.join(dataDir, 'announcements.json');
 const loansFile = path.join(dataDir, 'loans.json');
+
+console.log('Data directory:', dataDir);
 
 // Load/save functions
 function loadUsers() {
@@ -81,8 +87,9 @@ let users = loadUsers();
 let announcements = loadAnnouncements();
 let loans = loadLoans();
 
-console.log('⚠ Using file-based storage in /tmp (temporary solution)');
-console.log('To persist data permanently, add PostgreSQL addon to Railway');
+console.log('⚠ Using file-based storage in ./data directory');
+console.log('⚠ Data will NOT persist across container restarts on Railway');
+console.log('To persist data permanently, add PostgreSQL addon to Railway and set DATABASE_URL environment variable');
 
 // API Routes
 
@@ -274,7 +281,9 @@ app.post('/api/loans', (req, res) => {
     }
     
     const borrowedAt = new Date().toISOString();
-    loans.push({ id, username: username.toLowerCase(), title, author, borrowedAt });
+    // Set end date to 2 weeks from now
+    const endDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    loans.push({ id, username: username.toLowerCase(), title, author, borrowedAt, endDate });
     saveLoans(loans);
     res.json({ success: true });
 });
