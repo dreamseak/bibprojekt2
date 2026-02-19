@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
-const fs = require('fs');
+const Database = require('better-sqlite3');
 
 const app = express();
 
@@ -10,97 +10,52 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Data files for persistence
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+// Initialize SQLite database
+const dbPath = path.join(__dirname, 'data.db');
+const db = new Database(dbPath);
+
+// Enable foreign keys
+db.pragma('foreign_keys = ON');
+
+// Initialize database schema
+function initializeDatabase() {
+    // Users table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'student',
+            createdAt TEXT NOT NULL
+        )
+    `);
+    
+    // Announcements table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS announcements (
+            id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            createdAt TEXT NOT NULL
+        )
+    `);
+    
+    // Loans table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS loans (
+            id TEXT PRIMARY KEY,
+            username TEXT NOT NULL COLLATE NOCASE,
+            title TEXT NOT NULL,
+            author TEXT NOT NULL,
+            borrowedAt TEXT NOT NULL
+        )
+    `);
+    
+    console.log('Database initialized at:', dbPath);
 }
 
-const usersFile = path.join(dataDir, 'users.json');
-const announcementsFile = path.join(dataDir, 'announcements.json');
-const loansFile = path.join(dataDir, 'loans.json');
-
-// Clear old data files for fresh start (comment out after first deployment)
-// COMMENTED OUT - keeping data persistent across redeployments
-// try {
-//     if (fs.existsSync(usersFile)) fs.unlinkSync(usersFile);
-//     if (fs.existsSync(announcementsFile)) fs.unlinkSync(announcementsFile);
-//     if (fs.existsSync(loansFile)) fs.unlinkSync(loansFile);
-//     console.log('Cleared old data files for fresh start');
-// } catch (e) {
-//     console.error('Error clearing data files:', e);
-// }
-
-// Helper functions to load/save data
-function loadUsers() {
-    if (fs.existsSync(usersFile)) {
-        try {
-            const data = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-            // Normalize all stored usernames to lowercase
-            const normalized = {};
-            for (const [key, value] of Object.entries(data)) {
-                normalized[key.toLowerCase()] = value;
-            }
-            console.log(`Loaded users from file:`, Object.keys(normalized).map(u => ({ username: u, role: normalized[u].role })));
-            return normalized;
-        } catch (e) {
-            console.error('Error loading users:', e);
-        }
-    }
-    console.log('No users file found - starting with empty users object');
-    return {};
-}
-
-function saveUsers(data) {
-    try {
-        fs.writeFileSync(usersFile, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-        console.error('Error saving users:', e);
-    }
-}
-
-function loadAnnouncements() {
-    if (fs.existsSync(announcementsFile)) {
-        try {
-            return JSON.parse(fs.readFileSync(announcementsFile, 'utf8'));
-        } catch (e) {
-            console.error('Error loading announcements:', e);
-        }
-    }
-    return [];
-}
-
-function saveAnnouncements(data) {
-    try {
-        fs.writeFileSync(announcementsFile, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-        console.error('Error saving announcements:', e);
-    }
-}
-
-function loadLoans() {
-    if (fs.existsSync(loansFile)) {
-        try {
-            return JSON.parse(fs.readFileSync(loansFile, 'utf8'));
-        } catch (e) {
-            console.error('Error loading loans:', e);
-        }
-    }
-    return [];
-}
-
-function saveLoans(data) {
-    try {
-        fs.writeFileSync(loansFile, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-        console.error('Error saving loans:', e);
-    }
-}
-
-// Load all data at startup
-let users = loadUsers();
-let announcements = loadAnnouncements();
-let loans = loadLoans();
+initializeDatabase();
 
 // API Routes
 
@@ -112,25 +67,24 @@ app.get('/api/version', (req, res) => {
     });
 });
 
-// GET /api/debug/users - debug endpoint to see all users (temporary)
+// GET /api/debug/users - debug endpoint to see all users
 app.get('/api/debug/users', (req, res) => {
-    const usersInfo = Object.entries(users).map(([username, user]) => ({
-        username,
-        role: user.role,
-        hasPassword: !!user.password
-    }));
-    res.json({ users: usersInfo, usersCount: usersInfo.length });
+    try {
+        const users = db.prepare('SELECT username, role, createdAt FROM users').all();
+        res.json({ users, usersCount: users.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// GET /api/debug/reset - reset all data (temporary)
+// GET /api/debug/reset - reset all data
 app.get('/api/debug/reset', (req, res) => {
-    users = {};
-    announcements = [];
-    loans = [];
-    saveUsers(users);
-    saveAnnouncements(announcements);
-    saveLoans(loans);
-    res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
+    try {
+        db.exec('DELETE FROM users; DELETE FROM announcements; DELETE FROM loans;');
+        res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // POST /api/account/create - create a new user account
@@ -142,19 +96,28 @@ app.post('/api/account/create', (req, res) => {
     }
     
     username = username.toLowerCase();  // Normalize to lowercase
-    if (users[username]) {
-        return res.status(409).json({ error: 'User already exists' });
+    
+    try {
+        // Check if user exists
+        const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+        if (existing) {
+            return res.status(409).json({ error: 'User already exists' });
+        }
+        
+        // Only DreamSeak gets admin role, everyone else is student
+        const role = username === 'dreamseak' ? 'admin' : 'student';
+        const createdAt = new Date().toISOString();
+        
+        console.log(`Creating account: ${username} with role: ${role}`);
+        
+        db.prepare('INSERT INTO users (username, password, role, createdAt) VALUES (?, ?, ?, ?)')
+            .run(username, password, role, createdAt);
+        
+        res.json({ success: true, message: 'Account created', role });
+    } catch (e) {
+        console.error('Error creating account:', e);
+        res.status(500).json({ error: e.message });
     }
-    
-    // Only DreamSeak gets admin role, everyone else is student
-    const role = username === 'dreamseak' ? 'admin' : 'student';
-    console.log(`Creating account: ${username} with role: ${role}`);
-    
-    users[username] = { password, role, createdAt: new Date().toISOString() };
-    saveUsers(users);
-    console.log(`All users after creation:`, Object.keys(users).map(u => ({ username: u, role: users[u].role })));
-    
-    res.json({ success: true, message: 'Account created', role });
 });
 
 // POST /api/account/login - authenticate and login user
@@ -166,33 +129,64 @@ app.post('/api/account/login', (req, res) => {
     }
     
     username = username.toLowerCase();  // Normalize to lowercase
-    const user = users[username];
-    if (!user || user.password !== password) {
-        return res.status(401).json({ error: 'Invalid username or password' });
+    
+    try {
+        const user = db.prepare('SELECT username, password, role FROM users WHERE username = ?').get(username);
+        if (!user || user.password !== password) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+        }
+        
+        console.log(`Login: ${username} has role: ${user.role}`);
+        
+        res.json({
+            success: true,
+            username,
+            role: user.role || 'student',
+            message: 'Login successful'
+        });
+    } catch (e) {
+        console.error('Error during login:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// GET /api/account/me - get current user's info
+app.get('/api/account/me', (req, res) => {
+    let username = req.query.username || req.body?.username;
+    
+    if (!username) {
+        return res.status(400).json({ error: 'Username required' });
     }
     
-    console.log(`Login: ${username} has role: ${user.role}`);
+    username = username.toLowerCase();
     
-    // Return user info and role
-    res.json({
-        success: true,
-        username,
-        role: user.role || 'student',
-        message: 'Login successful'
-    });
+    try {
+        const user = db.prepare('SELECT username, role, createdAt FROM users WHERE username = ?').get(username);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        res.json({
+            username,
+            role: user.role || 'student',
+            createdAt: user.createdAt
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// GET /api/accounts - get all user accounts (admin only in frontend)
+// GET /api/accounts - get all user accounts
 app.get('/api/accounts', (req, res) => {
-    const accounts = Object.entries(users).map(([username, user]) => ({
-        username,
-        role: user.role || 'student',
-        createdAt: user.createdAt || new Date().toISOString()
-    }));
-    res.json({ accounts });
+    try {
+        const accounts = db.prepare('SELECT username, role, createdAt FROM users').all();
+        res.json({ accounts });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// PUT /api/account/:username/role - update user role (admin only)
+// PUT /api/account/:username/role - update user role
 app.put('/api/account/:username/role', (req, res) => {
     let { username } = req.params;
     const { role } = req.body;
@@ -201,138 +195,105 @@ app.put('/api/account/:username/role', (req, res) => {
         return res.status(400).json({ error: 'Username and role required' });
     }
     
-    username = username.toLowerCase();  // Normalize to lowercase
-    if (!users[username]) {
-        return res.status(404).json({ error: 'User not found' });
+    username = username.toLowerCase();
+    
+    try {
+        const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        db.prepare('UPDATE users SET role = ? WHERE username = ?').run(role, username);
+        res.json({ success: true, message: 'Role updated' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
-    
-    // Validate role
-    if (!['student', 'teacher', 'admin'].includes(role)) {
-        return res.status(400).json({ error: 'Invalid role' });
-    }
-    
-    users[username].role = role;
-    saveUsers(users);
-    res.json({ success: true, message: `Role updated to ${role}`, username, role });
-});
-
-// GET /api/account/me - get current user's info (requires username in query/header or body)
-// Frontend should send the currently logged-in username so backend can return their current role
-app.get('/api/account/me', (req, res) => {
-    // In a real app, this would use session/auth tokens
-    // For now, frontend must send username as query param
-    let username = req.query.username || req.body?.username;
-    
-    if (!username) {
-        return res.status(400).json({ error: 'Username required' });
-    }
-    
-    username = username.toLowerCase();  // Normalize to lowercase
-    const user = users[username];
-    if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({
-        username,
-        role: user.role || 'student',
-        createdAt: user.createdAt
-    });
 });
 
 // GET /api/announcements - get all announcements
 app.get('/api/announcements', (req, res) => {
-    res.json({ announcements });
+    try {
+        const announcements = db.prepare('SELECT id, username, title, content, createdAt FROM announcements ORDER BY createdAt DESC').all();
+        res.json({ announcements });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// POST /api/announcements - create a new announcement (admin only in frontend)
+// POST /api/announcements - create announcement
 app.post('/api/announcements', (req, res) => {
-    const { title, body } = req.body;
+    const { id, username, title, content } = req.body;
     
-    if (!title || !body) {
-        return res.status(400).json({ error: 'Title and body are required' });
+    if (!id || !username || !title || !content) {
+        return res.status(400).json({ error: 'All fields required' });
     }
     
-    const announcement = {
-        id: 'ann_' + Date.now(),
-        title,
-        body,
-        created: new Date().toISOString()
-    };
-    
-    announcements.push(announcement);
-    saveAnnouncements(announcements);
-    res.json({ success: true, announcement });
+    try {
+        const createdAt = new Date().toISOString();
+        db.prepare('INSERT INTO announcements (id, username, title, content, createdAt) VALUES (?, ?, ?, ?, ?)')
+            .run(id, username, title, content, createdAt);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// DELETE /api/announcements/:id - delete an announcement (admin only in frontend)
+// DELETE /api/announcements/:id - delete announcement
 app.delete('/api/announcements/:id', (req, res) => {
     const { id } = req.params;
-    const index = announcements.findIndex(a => a.id === id);
     
-    if (index === -1) {
-        return res.status(404).json({ error: 'Announcement not found' });
+    try {
+        db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
-    
-    const deleted = announcements.splice(index, 1);
-    saveAnnouncements(announcements);
-    res.json({ success: true, announcement: deleted[0] });
 });
 
-// GET /api/loans - get all loan records (shared across all users)
+// GET /api/loans - get all loaned books
 app.get('/api/loans', (req, res) => {
-    // Remove expired loans
-    const now = new Date();
-    const activeLoans = loans.filter(l => {
-        if (!l.endDate) return true;
-        return new Date(l.endDate) > now;
-    });
-    res.json({ loans: activeLoans });
+    try {
+        const loans = db.prepare('SELECT id, username, title, author, borrowedAt FROM loans').all();
+        res.json({ loans });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// POST /api/loans - create a new loan record
+// POST /api/loans - create loan record
 app.post('/api/loans', (req, res) => {
-    const { id, user, endDate } = req.body;
+    const { id, username, title, author } = req.body;
     
-    if (!id || !user) {
-        return res.status(400).json({ error: 'Book ID and user required' });
+    if (!id || !username || !title || !author) {
+        return res.status(400).json({ error: 'All fields required' });
     }
     
-    // Check if already loaned
-    if (loans.some(l => String(l.id) === String(id) && (!l.endDate || new Date(l.endDate) > new Date()))) {
-        return res.status(409).json({ error: 'Book already loaned' });
+    try {
+        const borrowedAt = new Date().toISOString();
+        db.prepare('INSERT INTO loans (id, username, title, author, borrowedAt) VALUES (?, ?, ?, ?, ?)')
+            .run(id, username.toLowerCase(), title, author, borrowedAt);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
-    
-    const loan = {
-        id: String(id),
-        user,
-        endDate: endDate || null,
-        createdAt: new Date().toISOString()
-    };
-    
-    loans.push(loan);
-    saveLoans(loans);
-    res.json({ success: true, loan });
 });
 
-// DELETE /api/loans/:id - return a loaned book
+// DELETE /api/loans/:id - return loaned book
 app.delete('/api/loans/:id', (req, res) => {
     const { id } = req.params;
-    const index = loans.findIndex(l => String(l.id) === String(id));
     
-    if (index === -1) {
-        return res.status(404).json({ error: 'Loan record not found' });
+    try {
+        db.prepare('DELETE FROM loans WHERE id = ?').run(id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
-    
-    const deleted = loans.splice(index, 1);
-    saveLoans(loans);
-    res.json({ success: true, loan: deleted[0] });
 });
 
 // Serve static files (frontend) from parent directory
 app.use(express.static(path.join(__dirname, '..')));
 
-// Fallback: serve index.html for client-side routing (if needed)
+// Fallback: serve index.html for client-side routing
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
@@ -341,4 +302,6 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log(`Database: ${dbPath}`);
 });
+
