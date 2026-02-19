@@ -4,14 +4,17 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy all files
+# Copy backend package files
+COPY backend/package*.json ./backend/
+
+# Install backend dependencies
+RUN cd backend && npm install --production && cd ..
+
+# Copy all files (frontend + backend)
 COPY . .
 
-# Install http-server globally to serve static files
-RUN npm install -g http-server
+# Expose port (Railway will assign via PORT environment variable)
+EXPOSE 3000
 
-# Expose port
-EXPOSE 8080
-
-# Start the static file server on the port provided by Railway (defaults to 8080)
-CMD ["sh", "-c", "http-server -p ${PORT:-8080}"]
+# Start the Express backend server
+CMD ["node", "backend/server.js"]
