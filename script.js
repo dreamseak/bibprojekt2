@@ -214,6 +214,31 @@ function loadAccount() {
     updateLoanCount();
 }
 
+// Fetch and update the current user's role from the backend (in case it changed)
+async function refreshCurrentUserRole() {
+    if (!currentUser) return;
+    try {
+        const res = await fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(currentUser));
+        if (res.ok) {
+            const data = await res.json();
+            if (data.role && data.role !== currentUserRole) {
+                // Role has changed! Update it and refresh the page
+                currentUserRole = data.role;
+                console.log('User role updated to:', data.role);
+                // In production, you might show a notification instead of reloading
+                // location.reload();
+            }
+        }
+    } catch (e) {
+        // silently fail if backend is unavailable
+    }
+}
+
+// Periodically check if current user's role has been updated by an admin
+setInterval(() => {
+    if (currentUser) refreshCurrentUserRole();
+}, 30000); // check every 30 seconds
+
 // Export account data to JSON
 function exportAccountData() {
     if (!currentUser) {
@@ -235,6 +260,14 @@ function exportAccountData() {
 window.addEventListener('DOMContentLoaded', function() {
     loadAccount();
     checkAppVersionOnLoad();
+    
+    // Refresh role when page comes back into focus (e.g., user switches tabs)
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && currentUser) {
+            refreshCurrentUserRole();
+        }
+    });
+    
     if (document.getElementById('booksList')) displayMyBooks();
     if (document.getElementById('loanedList')) displayLoanedBooks();
     if (document.getElementById('announcementsContainer')) displayAnnouncements();

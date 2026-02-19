@@ -95,6 +95,29 @@ app.put('/api/account/:username/role', (req, res) => {
     res.json({ success: true, message: `Role updated to ${role}`, username, role });
 });
 
+// GET /api/account/me - get current user's info (requires username in query/header or body)
+// Frontend should send the currently logged-in username so backend can return their current role
+app.get('/api/account/me', (req, res) => {
+    // In a real app, this would use session/auth tokens
+    // For now, frontend must send username as query param
+    const username = req.query.username || req.body?.username;
+    
+    if (!username) {
+        return res.status(400).json({ error: 'Username required' });
+    }
+    
+    const user = users[username];
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+        username,
+        role: user.role || 'student',
+        createdAt: user.createdAt
+    });
+});
+
 // Serve static files (frontend) from parent directory
 app.use(express.static(path.join(__dirname, '..')));
 
