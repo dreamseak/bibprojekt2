@@ -10,63 +10,100 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Initialize PostgreSQL connection pool
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
+// Check if DATABASE_URL is set
+if (!process.env.DATABASE_URL) {
+    console.error('❌ ERROR: DATABASE_URL environment variable is not set!');
+    process.exit(1);
+}
 
-console.log('✓ PostgreSQL connection pool initialized');
+console.log('📦 Connecting to PostgreSQL...');
+
+// Initialize PostgreSQL connection pool
+let pool;
+try {
+    pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    // Test the connection
+    pool.on('error', (err) => {
+        console.error('❌ PostgreSQL pool error:', err);
+    });
+    
+    console.log('✓ PostgreSQL connection pool created');
+} catch (e) {
+    console.error('❌ Failed to create connection pool:', e.message);
+    process.exit(1);
+}
 
 // Initialize database tables
 async function initializeDatabase() {
-    const client = await pool.connect();
     try {
-        // Create users table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                username VARCHAR(255) PRIMARY KEY,
-                password VARCHAR(255) NOT NULL,
-                role VARCHAR(50) DEFAULT 'student',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+        console.log('📋 Initializing database tables...');
+        const client = await pool.connect();
+        try {
+            // Create users table
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS users (
+                    username VARCHAR(255) PRIMARY KEY,
+                    password VARCHAR(255) NOT NULL,
+                    role VARCHAR(50) DEFAULT 'student',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
 
-        // Create announcements table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS announcements (
-                id VARCHAR(255) PRIMARY KEY,
-                title VARCHAR(500),
-                body TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+            // Create announcements table
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS announcements (
+                    id VARCHAR(255) PRIMARY KEY,
+                    title VARCHAR(500),
+                    body TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
 
-        // Create loans table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS loans (
-                id VARCHAR(255) NOT NULL,
-                username VARCHAR(255) NOT NULL,
-                title VARCHAR(500) NOT NULL,
-                author VARCHAR(500) NOT NULL,
-                borrowed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                end_date TIMESTAMP NOT NULL,
-                PRIMARY KEY (id, username)
-            );
-        `);
+            // Create loans table
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS loans (
+                    id VARCHAR(255) NOT NULL,
+                    username VARCHAR(255) NOT NULL,
+                    title VARCHAR(500) NOT NULL,
+                    author VARCHAR(500) NOT NULL,
+                    borrowed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    end_date TIMESTAMP NOT NULL,
+                    PRIMARY KEY (id, username)
+                );
+            `);
 
-        console.log('✓ Database tables initialized');
+            console.log('✓ Database tables initialized successfully');
+        } finally {
+            client.release();
+        }
     } catch (e) {
-        console.error('Error initializing database:', e.message);
-    } finally {
-        client.release();
+        console.error('❌ Error initializing database:', e.message);
+        throw e;
     }
 }
 
-// Initialize on startup
-initializeDatabase();
+// Start server after database initialization
+async function startServer() {
+    try {
+        await initializeDatabase();
+        
+        const PORT = process.env.PORT || 3000;
+        app.listen(PORT, () => {
+            console.log(`✓ Server running on port ${PORT}`);
+            console.log('✓ Using PostgreSQL for persistent storage');
+        });
+    } catch (e) {
+        console.error('❌ Failed to start server:', e.message);
+        process.exit(1);
+    }
+}
+
+// Start the server
+startServer();
 
 // API Routes
 
@@ -356,9 +393,3 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`✓ Server running on port ${PORT}`);
-    console.log('✓ Using PostgreSQL for persistent storage');
-});
