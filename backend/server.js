@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -9,17 +10,79 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// In-memory data store (will be lost on redeploy - for testing only!)
-let users = {};
-let announcements = [];
-let loans = [];
+// Data file path (will persist across requests, but not across container restarts)
+const dataDir = '/tmp';  // Use /tmp which is more persistent than memory on Railway
+const usersFile = path.join(dataDir, 'users.json');
+const announcementsFile = path.join(dataDir, 'announcements.json');
+const loansFile = path.join(dataDir, 'loans.json');
 
-console.log('⚠ WARNING: Using in-memory storage. Data will be lost on redeploy!');
-console.log('To persist data, add PostgreSQL addon to Railway:');
-console.log('1. Go to railway.app and open your project');
-console.log('2. Click "Add service" and select "PostgreSQL"');
-console.log('3. Railway will set DATABASE_URL automatically');
-console.log('4. Redeploy this service');
+// Load/save functions
+function loadUsers() {
+    try {
+        if (fs.existsSync(usersFile)) {
+            const data = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+            console.log('✓ Loaded users from file:', Object.keys(data).length, 'users');
+            return data;
+        }
+    } catch (e) {
+        console.error('Error loading users:', e.message);
+    }
+    return {};
+}
+
+function saveUsers(data) {
+    try {
+        fs.writeFileSync(usersFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving users:', e.message);
+    }
+}
+
+function loadAnnouncements() {
+    try {
+        if (fs.existsSync(announcementsFile)) {
+            return JSON.parse(fs.readFileSync(announcementsFile, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading announcements:', e.message);
+    }
+    return [];
+}
+
+function saveAnnouncements(data) {
+    try {
+        fs.writeFileSync(announcementsFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving announcements:', e.message);
+    }
+}
+
+function loadLoans() {
+    try {
+        if (fs.existsSync(loansFile)) {
+            return JSON.parse(fs.readFileSync(loansFile, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading loans:', e.message);
+    }
+    return [];
+}
+
+function saveLoans(data) {
+    try {
+        fs.writeFileSync(loansFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving loans:', e.message);
+    }
+}
+
+// Load all data at startup
+let users = loadUsers();
+let announcements = loadAnnouncements();
+let loans = loadLoans();
+
+console.log('⚠ Using file-based storage in /tmp (temporary solution)');
+console.log('To persist data permanently, add PostgreSQL addon to Railway');
 
 // API Routes
 
@@ -31,12 +94,13 @@ app.get('/api/version', (req, res) => {
     });
 });
 
-// GET /api/debug/status - check database status
+// GET /api/debug/status - check storage status
 app.get('/api/debug/status', (req, res) => {
     res.json({
         status: 'OK',
-        storage: 'In-memory (temporary)',
-        warning: 'Data will be lost on redeploy'
+        storage: 'File-based (/tmp)',
+        usersCount: Object.keys(users).length,
+        announcementsCount: announcements.length
     });
 });
 
@@ -55,6 +119,9 @@ app.get('/api/debug/reset', (req, res) => {
     users = {};
     announcements = [];
     loans = [];
+    saveUsers(users);
+    saveAnnouncements(announcements);
+    saveLoans(loans);
     res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
 });
 
@@ -79,6 +146,7 @@ app.post('/api/account/create', (req, res) => {
     console.log(`✓ Creating account: ${username} with role: ${role}`);
     
     users[username] = { password, role, createdAt };
+    saveUsers(users);
     
     res.json({ success: true, message: 'Account created', role });
 });
@@ -120,6 +188,7 @@ app.get('/api/account/me', (req, res) => {
     const user = users[username];
     
     if (!user) {
+        console.log(`User not found: ${username}. Available users:`, Object.keys(users));
         return res.status(404).json({ error: 'User not found' });
     }
     
@@ -156,6 +225,7 @@ app.put('/api/account/:username/role', (req, res) => {
     }
     
     users[username].role = role;
+    saveUsers(users);
     res.json({ success: true, message: 'Role updated' });
 });
 
@@ -178,6 +248,7 @@ app.post('/api/announcements', (req, res) => {
     const createdAt = new Date().toISOString();
     
     announcements.push({ id, title: title || 'Ankündigung', body: content, created: createdAt });
+    saveAnnouncements(announcements);
     res.json({ success: true });
 });
 
@@ -185,6 +256,7 @@ app.post('/api/announcements', (req, res) => {
 app.delete('/api/announcements/:id', (req, res) => {
     const { id } = req.params;
     announcements = announcements.filter(a => a.id !== id);
+    saveAnnouncements(announcements);
     res.json({ success: true });
 });
 
@@ -203,6 +275,7 @@ app.post('/api/loans', (req, res) => {
     
     const borrowedAt = new Date().toISOString();
     loans.push({ id, username: username.toLowerCase(), title, author, borrowedAt });
+    saveLoans(loans);
     res.json({ success: true });
 });
 
@@ -210,6 +283,7 @@ app.post('/api/loans', (req, res) => {
 app.delete('/api/loans/:id', (req, res) => {
     const { id } = req.params;
     loans = loans.filter(l => l.id !== id);
+    saveLoans(loans);
     res.json({ success: true });
 });
 
@@ -225,5 +299,6 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✓ Server running on port ${PORT}`);
+    console.log(`Data stored at: ${dataDir}`);
 });
 
