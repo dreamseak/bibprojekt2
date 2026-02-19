@@ -222,11 +222,11 @@ async function refreshCurrentUserRole() {
         if (res.ok) {
             const data = await res.json();
             if (data.role && data.role !== currentUserRole) {
-                // Role has changed! Update it and refresh the page
+                // Role has changed! Update it and reload to re-render UI with new permissions
+                console.log('User role updated from', currentUserRole, 'to:', data.role);
                 currentUserRole = data.role;
-                console.log('User role updated to:', data.role);
-                // In production, you might show a notification instead of reloading
-                // location.reload();
+                // Reload page so teacher buttons and features appear/disappear
+                location.reload();
             }
         }
     } catch (e) {
@@ -470,37 +470,52 @@ function saveAnnouncements(anns) {
     try { localStorage.setItem('announcements', JSON.stringify(anns)); } catch (e) {}
 }
 
+async function fetchAnnouncementsFromServer() {
+    try {
+        const res = await fetch(API_URL + '/api/announcements');
+        if (res.ok) {
+            const data = await res.json();
+            return data.announcements || [];
+        }
+    } catch (e) {
+        // fallback to localStorage if server fetch fails
+    }
+    return getAnnouncements();
+}
+
 function displayAnnouncements() {
     const container = document.getElementById('announcementsContainer');
     if (!container) return;
-    let anns = getAnnouncements();
-    // seed a default welcome announcement if none exist
-    if (!anns || anns.length === 0) {
-        anns = [{ id: 'welcome_1', title: 'Willkommen!', body: 'Neu: Gruppenverwaltung für Lehrkräfte ist jetzt verfügbar. Schau in dein Konto für mehr.', created: new Date().toISOString() }];
-        saveAnnouncements(anns);
-    }
-    container.innerHTML = '';
-    for (const a of anns) {
-        const card = document.createElement('div');
-        card.className = 'announcement-card';
-        const left = document.createElement('div');
-        left.className = 'announcement-left';
-        const title = document.createElement('div');
-        title.className = 'announcement-title';
-        title.textContent = a.title || '';
-        const body = document.createElement('div');
-        body.className = 'announcement-body';
-        body.textContent = a.body || '';
-        const meta = document.createElement('div');
-        meta.className = 'announcement-meta';
-        try { meta.textContent = new Date(a.created).toLocaleDateString('de-DE'); } catch (e) { meta.textContent = ''; }
-        left.appendChild(title);
-        left.appendChild(body);
-        left.appendChild(meta);
-
-        card.appendChild(left);
-        container.appendChild(card);
-    }
+    
+    // Fetch from server, fallback to localStorage
+    fetchAnnouncementsFromServer().then(anns => {
+        let announcements = anns;
+        // seed a default welcome announcement if none exist
+        if (!announcements || announcements.length === 0) {
+            announcements = [{ id: 'welcome_1', title: 'Willkommen!', body: 'Neu: Gruppenverwaltung für Lehrkräfte ist jetzt verfügbar. Schau in dein Konto für mehr.', created: new Date().toISOString() }];
+        }
+        container.innerHTML = '';
+        for (const a of announcements) {
+            const card = document.createElement('div');
+            card.className = 'announcement-card';
+            const left = document.createElement('div');
+            left.className = 'announcement-left';
+            const title = document.createElement('div');
+            title.className = 'announcement-title';
+            title.textContent = a.title || '';
+            const body = document.createElement('div');
+            body.className = 'announcement-body';
+            body.textContent = a.body || '';
+            const meta = document.createElement('div');
+            meta.className = 'announcement-meta';
+            try { meta.textContent = new Date(a.created).toLocaleDateString('de-DE'); } catch (e) { meta.textContent = ''; }
+            left.appendChild(title);
+            left.appendChild(body);
+            left.appendChild(meta);
+            card.appendChild(left);
+            container.appendChild(card);
+        }
+    });
 }
 
 // --- Events (list-style calendar) ----------------------------------------
@@ -680,18 +695,30 @@ function openManageAnnouncementsModal() {
     }
     renderList();
 
-    document.getElementById('createAnnBtn').addEventListener('click', () => {
+    document.getElementById('createAnnBtn').addEventListener('click', async () => {
         const t = (document.getElementById('annTitle').value || '').trim();
         const b = (document.getElementById('annBody').value || '').trim();
         if (!t && !b) return alert('Bitte Titel oder Text eingeben.');
-        const anns = getAnnouncements() || [];
-        const id = 'ann_' + Date.now().toString(36);
-        anns.unshift({ id, title: t || 'Ankündigung', body: b || '', created: new Date().toISOString() });
-        saveAnnouncements(anns);
-        document.getElementById('annTitle').value = '';
-        document.getElementById('annBody').value = '';
-        renderList();
-        displayAnnouncements();
+        
+        try {
+            // Post to server
+            const res = await fetch(API_URL + '/api/announcements', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: t || 'Ankündigung', body: b || '' })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                alert('Fehler beim Erstellen: ' + (err.error || 'Unbekannter Fehler'));
+                return;
+            }
+            document.getElementById('annTitle').value = '';
+            document.getElementById('annBody').value = '';
+            renderList();
+            displayAnnouncements();
+        } catch (e) {
+            alert('Fehler beim Erstellen: ' + e.message);
+        }
     });
 }
 

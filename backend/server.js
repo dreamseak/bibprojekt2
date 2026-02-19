@@ -12,6 +12,7 @@ app.use(bodyParser.json());
 // In-memory user storage (for demo; persists only during session)
 // In production, use a real database like MongoDB or PostgreSQL
 const users = {};
+const announcements = [];
 
 // API Routes
 
@@ -116,6 +117,43 @@ app.get('/api/account/me', (req, res) => {
         role: user.role || 'student',
         createdAt: user.createdAt
     });
+});
+
+// GET /api/announcements - get all announcements
+app.get('/api/announcements', (req, res) => {
+    res.json({ announcements });
+});
+
+// POST /api/announcements - create a new announcement (admin only in frontend)
+app.post('/api/announcements', (req, res) => {
+    const { title, body } = req.body;
+    
+    if (!title || !body) {
+        return res.status(400).json({ error: 'Title and body are required' });
+    }
+    
+    const announcement = {
+        id: 'ann_' + Date.now(),
+        title,
+        body,
+        created: new Date().toISOString()
+    };
+    
+    announcements.push(announcement);
+    res.json({ success: true, announcement });
+});
+
+// DELETE /api/announcements/:id - delete an announcement (admin only in frontend)
+app.delete('/api/announcements/:id', (req, res) => {
+    const { id } = req.params;
+    const index = announcements.findIndex(a => a.id === id);
+    
+    if (index === -1) {
+        return res.status(404).json({ error: 'Announcement not found' });
+    }
+    
+    const deleted = announcements.splice(index, 1);
+    res.json({ success: true, announcement: deleted[0] });
 });
 
 // Serve static files (frontend) from parent directory
