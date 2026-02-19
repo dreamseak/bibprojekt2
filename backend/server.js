@@ -166,14 +166,18 @@ app.get('/api/announcements', (req, res) => {
 
 // POST /api/announcements - create announcement
 app.post('/api/announcements', (req, res) => {
-    const { id, username, title, content } = req.body;
+    const { title, body } = req.body;
     
-    if (!id || !username || !title || !content) {
-        return res.status(400).json({ error: 'All fields required' });
+    if (!title && !body) {
+        return res.status(400).json({ error: 'Title or body required' });
     }
     
+    const id = 'ann_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const username = 'system';
+    const content = body || '';
     const createdAt = new Date().toISOString();
-    announcements.push({ id, username, title, content, createdAt });
+    
+    announcements.push({ id, title: title || 'Ankündigung', body: content, created: createdAt });
     res.json({ success: true });
 });
 
