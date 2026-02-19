@@ -185,11 +185,12 @@ async function loginAccount(username, password) {
             alert('❌ ' + (data.error || 'Fehler beim Anmelden'));
             return false;
         }
-        currentUser = data.username;  // Use normalized username from server
+        // Store original username casing for display, but use the normalized one for lookups
+        currentUser = username;  // Keep original casing
         currentUserRole = data.role || 'student';
         myBooks = [];
-        localStorage.setItem('currentUser', data.username);  // Store normalized username
-        alert('✓ Willkommen, ' + data.username + '!');
+        localStorage.setItem('currentUser', username);  // Store original casing
+        alert('✓ Willkommen, ' + username + '!');
         location.reload();
         return true;
     } catch (error) {
@@ -215,11 +216,11 @@ function logoutAccount() {
 async function loadAccount() {
     const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
-        currentUser = savedUser;
+        currentUser = savedUser;  // Keep original casing for display
         myBooks = [];
-        // Fetch role from server; fallback to defaults
+        // Fetch role from server using lowercase for API call
         try {
-            const r = await fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(savedUser));
+            const r = await fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(savedUser.toLowerCase()));
             if (r.ok) {
                 const data = await r.json();
                 if (data && data.role) {
@@ -243,7 +244,7 @@ async function loadAccount() {
 async function refreshCurrentUserRole() {
     if (!currentUser) return;
     try {
-        const res = await fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(currentUser));
+        const res = await fetch(API_URL + '/api/account/me?username=' + encodeURIComponent(currentUser.toLowerCase()));
         if (res.ok) {
             const data = await res.json();
             if (data.role && data.role !== currentUserRole) {
