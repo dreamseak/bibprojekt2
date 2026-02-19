@@ -1416,10 +1416,16 @@ function saveBorrow() {
         
         // Also save to server
         try {
+            const bookInfo = bookInfoCache[currentBorrowId] || { title: 'Unknown', author: 'Unknown' };
             fetch(API_URL + '/api/loans', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: normalizedId, user: currentUser || '', endDate: endDate })
+                body: JSON.stringify({ 
+                    id: normalizedId, 
+                    username: currentUser || '', 
+                    title: bookInfo.title,
+                    author: bookInfo.author
+                })
             }).catch(e => console.error('Error saving loan to server:', e));
         } catch (e) {
             console.error('Error posting loan:', e);
