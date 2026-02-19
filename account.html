@@ -79,8 +79,8 @@
             `;
         }
 
-        window.addEventListener('DOMContentLoaded', function() {
-            loadAccount();
+        window.addEventListener('DOMContentLoaded', async function() {
+            await loadAccount();  // Wait for role to be fetched
             const area = document.getElementById('accountArea');
             if (currentUser) {
                 area.innerHTML = `
