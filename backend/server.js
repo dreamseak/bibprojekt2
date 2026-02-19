@@ -99,12 +99,13 @@ app.get('/api/version', (req, res) => {
 
 // POST /api/account/create - create a new user account
 app.post('/api/account/create', (req, res) => {
-    const { username, password } = req.body;
+    let { username, password } = req.body;
     
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password required' });
     }
     
+    username = username.toLowerCase();  // Normalize to lowercase
     if (users[username]) {
         return res.status(409).json({ error: 'User already exists' });
     }
@@ -118,12 +119,13 @@ app.post('/api/account/create', (req, res) => {
 
 // POST /api/account/login - authenticate and login user
 app.post('/api/account/login', (req, res) => {
-    const { username, password } = req.body;
+    let { username, password } = req.body;
     
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password required' });
     }
     
+    username = username.toLowerCase();  // Normalize to lowercase
     const user = users[username];
     if (!user || user.password !== password) {
         return res.status(401).json({ error: 'Invalid username or password' });
@@ -150,13 +152,14 @@ app.get('/api/accounts', (req, res) => {
 
 // PUT /api/account/:username/role - update user role (admin only)
 app.put('/api/account/:username/role', (req, res) => {
-    const { username } = req.params;
+    let { username } = req.params;
     const { role } = req.body;
     
     if (!username || !role) {
         return res.status(400).json({ error: 'Username and role required' });
     }
     
+    username = username.toLowerCase();  // Normalize to lowercase
     if (!users[username]) {
         return res.status(404).json({ error: 'User not found' });
     }
@@ -176,12 +179,13 @@ app.put('/api/account/:username/role', (req, res) => {
 app.get('/api/account/me', (req, res) => {
     // In a real app, this would use session/auth tokens
     // For now, frontend must send username as query param
-    const username = req.query.username || req.body?.username;
+    let username = req.query.username || req.body?.username;
     
     if (!username) {
         return res.status(400).json({ error: 'Username required' });
     }
     
+    username = username.toLowerCase();  // Normalize to lowercase
     const user = users[username];
     if (!user) {
         return res.status(404).json({ error: 'User not found' });

@@ -185,11 +185,11 @@ async function loginAccount(username, password) {
             alert('❌ ' + (data.error || 'Fehler beim Anmelden'));
             return false;
         }
-        currentUser = username;
+        currentUser = data.username;  // Use normalized username from server
         currentUserRole = data.role || 'student';
         myBooks = [];
-        localStorage.setItem('currentUser', username);
-        alert('✓ Willkommen, ' + username + '!');
+        localStorage.setItem('currentUser', data.username);  // Store normalized username
+        alert('✓ Willkommen, ' + data.username + '!');
         location.reload();
         return true;
     } catch (error) {
