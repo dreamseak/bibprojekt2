@@ -11,22 +11,33 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Initialize PostgreSQL connection
-const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
-});
+let client = null;
+let dbReady = false;
 
-// Connect to database
-client.connect().then(() => {
-    console.log('Connected to PostgreSQL database');
-    initializeDatabase();
-}).catch(err => {
-    console.error('Failed to connect to database:', err);
-    process.exit(1);
-});
+if (process.env.DATABASE_URL) {
+    client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+    });
+    
+    client.connect()
+        .then(() => {
+            console.log('✓ Connected to PostgreSQL database');
+            initializeDatabase();
+        })
+        .catch(err => {
+            console.error('✗ Failed to connect to PostgreSQL:', err.message);
+            console.log('Starting without database - data will not persist!');
+        });
+} else {
+    console.warn('⚠ DATABASE_URL not set - running without persistent database');
+    console.warn('⚠ Please add PostgreSQL addon to Railway');
+}
 
 // Initialize database schema
 async function initializeDatabase() {
+    if (!client) return;
+    
     try {
         // Users table
         await client.query(`
@@ -61,10 +72,20 @@ async function initializeDatabase() {
             )
         `);
         
-        console.log('Database tables initialized');
+        dbReady = true;
+        console.log('✓ Database tables initialized');
     } catch (e) {
-        console.error('Error initializing database:', e);
+        console.error('Error initializing database:', e.message);
     }
+}
+
+// Helper function to check database connectivity
+function checkDB() {
+    if (!client || !dbReady) {
+        console.warn('Database not available');
+        return false;
+    }
+    return true;
 }
 
 // API Routes
@@ -77,8 +98,21 @@ app.get('/api/version', (req, res) => {
     });
 });
 
+// GET /api/debug/status - check database status
+app.get('/api/debug/status', (req, res) => {
+    res.json({
+        status: 'OK',
+        database: dbReady ? 'Connected' : 'Not connected',
+        hasURL: !!process.env.DATABASE_URL
+    });
+});
+
 // GET /api/debug/users - debug endpoint to see all users
 app.get('/api/debug/users', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     try {
         const result = await client.query('SELECT username, role, "createdAt" FROM users');
         res.json({ users: result.rows, usersCount: result.rows.length });
@@ -89,6 +123,10 @@ app.get('/api/debug/users', async (req, res) => {
 
 // GET /api/debug/reset - reset all data
 app.get('/api/debug/reset', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     try {
         await client.query('DELETE FROM users');
         await client.query('DELETE FROM announcements');
@@ -101,6 +139,10 @@ app.get('/api/debug/reset', async (req, res) => {
 
 // POST /api/account/create - create a new user account
 app.post('/api/account/create', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     let { username, password } = req.body;
     
     if (!username || !password) {
@@ -120,7 +162,7 @@ app.post('/api/account/create', async (req, res) => {
         const role = username === 'dreamseak' ? 'admin' : 'student';
         const createdAt = new Date().toISOString();
         
-        console.log(`Creating account: ${username} with role: ${role}`);
+        console.log(`✓ Creating account: ${username} with role: ${role}`);
         
         await client.query(
             'INSERT INTO users (username, password, role, "createdAt") VALUES ($1, $2, $3, $4)',
@@ -136,6 +178,10 @@ app.post('/api/account/create', async (req, res) => {
 
 // POST /api/account/login - authenticate and login user
 app.post('/api/account/login', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     let { username, password } = req.body;
     
     if (!username || !password) {
@@ -152,7 +198,7 @@ app.post('/api/account/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid username or password' });
         }
         
-        console.log(`Login: ${username} has role: ${user.role}`);
+        console.log(`✓ Login: ${username} has role: ${user.role}`);
         
         res.json({
             success: true,
@@ -168,6 +214,10 @@ app.post('/api/account/login', async (req, res) => {
 
 // GET /api/account/me - get current user's info
 app.get('/api/account/me', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     let username = req.query.username || req.body?.username;
     
     if (!username) {
@@ -196,6 +246,10 @@ app.get('/api/account/me', async (req, res) => {
 
 // GET /api/accounts - get all user accounts
 app.get('/api/accounts', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     try {
         const result = await client.query('SELECT username, role, "createdAt" FROM users');
         res.json({ accounts: result.rows });
@@ -206,6 +260,10 @@ app.get('/api/accounts', async (req, res) => {
 
 // PUT /api/account/:username/role - update user role
 app.put('/api/account/:username/role', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     let { username } = req.params;
     const { role } = req.body;
     
@@ -230,6 +288,10 @@ app.put('/api/account/:username/role', async (req, res) => {
 
 // GET /api/announcements - get all announcements
 app.get('/api/announcements', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     try {
         const result = await client.query('SELECT id, username, title, content, "createdAt" FROM announcements ORDER BY "createdAt" DESC');
         res.json({ announcements: result.rows });
@@ -240,6 +302,10 @@ app.get('/api/announcements', async (req, res) => {
 
 // POST /api/announcements - create announcement
 app.post('/api/announcements', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     const { id, username, title, content } = req.body;
     
     if (!id || !username || !title || !content) {
@@ -260,6 +326,10 @@ app.post('/api/announcements', async (req, res) => {
 
 // DELETE /api/announcements/:id - delete announcement
 app.delete('/api/announcements/:id', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     const { id } = req.params;
     
     try {
@@ -272,6 +342,10 @@ app.delete('/api/announcements/:id', async (req, res) => {
 
 // GET /api/loans - get all loaned books
 app.get('/api/loans', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     try {
         const result = await client.query('SELECT id, username, title, author, "borrowedAt" FROM loans');
         res.json({ loans: result.rows });
@@ -282,6 +356,10 @@ app.get('/api/loans', async (req, res) => {
 
 // POST /api/loans - create loan record
 app.post('/api/loans', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     const { id, username, title, author } = req.body;
     
     if (!id || !username || !title || !author) {
@@ -302,6 +380,10 @@ app.post('/api/loans', async (req, res) => {
 
 // DELETE /api/loans/:id - return loaned book
 app.delete('/api/loans/:id', async (req, res) => {
+    if (!checkDB()) {
+        return res.status(503).json({ error: 'Database not available' });
+    }
+    
     const { id } = req.params;
     
     try {
@@ -323,7 +405,7 @@ app.get('*', (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Database URL: ${process.env.DATABASE_URL ? 'Configured' : 'Not set - using in-memory mode'}`);
+    console.log(`✓ Server running on port ${PORT}`);
+    console.log(`Database: ${dbReady ? 'Ready' : 'Not connected'}`);
 });
 
