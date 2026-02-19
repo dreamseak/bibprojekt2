@@ -176,6 +176,47 @@ app.get('/api/account/me', async (req, res) => {
     }
 });
 
+app.get('/api/accounts', async (req, res) => {
+    try {
+        if (dbReady) {
+            const result = await query('SELECT username, role, created_at as "createdAt" FROM users ORDER BY created_at DESC');
+            res.json({ accounts: result.rows });
+        } else {
+            const accounts = Object.entries(users).map(([username, user]) => ({
+                username,
+                role: user.role || 'student',
+                createdAt: user.createdAt
+            }));
+            res.json({ accounts });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/account/:username/role', async (req, res) => {
+    let { username } = req.params;
+    const { role } = req.body;
+    if (!username || !role) return res.status(400).json({ error: 'Username and role required' });
+    
+    username = username.toLowerCase();
+    
+    try {
+        if (dbReady) {
+            const result = await query('SELECT * FROM users WHERE username = $1', [username]);
+            if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+            await query('UPDATE users SET role = $1 WHERE username = $2', [role, username]);
+        } else {
+            if (!users[username]) return res.status(404).json({ error: 'User not found' });
+            users[username].role = role;
+            saveToFile(usersFile, users);
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/loans', async (req, res) => {
     try {
         if (dbReady) {
