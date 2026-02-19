@@ -1646,8 +1646,8 @@ async function displayLibraryBooks(filter, page = 1) {
     const paginationContainer = document.getElementById('libraryPagination');
     const pageSize = 30; // items per page
     
-    // Reload borrowedBooks from localStorage to ensure latest state
-    loadBorrowedBooks();
+    // Fetch latest loaned books from server to ensure we see all users' loans
+    await fetchBorrowedBooksFromServer();
     
     if (!libraryContainer) return;
     libraryContainer.innerHTML = '';
