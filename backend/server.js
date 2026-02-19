@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 
 const app = express();
 
@@ -10,86 +10,63 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Create data directory if it doesn't exist
-const dataDir = path.join(__dirname, '..', 'data');  // Use ./data directory in app
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const usersFile = path.join(dataDir, 'users.json');
-const announcementsFile = path.join(dataDir, 'announcements.json');
-const loansFile = path.join(dataDir, 'loans.json');
-
-console.log('Data directory:', dataDir);
-
-// Load/save functions
-function loadUsers() {
-    try {
-        if (fs.existsSync(usersFile)) {
-            const data = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-            console.log('✓ Loaded users from file:', Object.keys(data).length, 'users');
-            return data;
-        }
-    } catch (e) {
-        console.error('Error loading users:', e.message);
+// Initialize PostgreSQL connection pool
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
     }
-    return {};
-}
+});
 
-function saveUsers(data) {
-    try {
-        fs.writeFileSync(usersFile, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-        console.error('Error saving users:', e.message);
-    }
-}
+console.log('✓ PostgreSQL connection pool initialized');
 
-function loadAnnouncements() {
+// Initialize database tables
+async function initializeDatabase() {
+    const client = await pool.connect();
     try {
-        if (fs.existsSync(announcementsFile)) {
-            return JSON.parse(fs.readFileSync(announcementsFile, 'utf8'));
-        }
-    } catch (e) {
-        console.error('Error loading announcements:', e.message);
-    }
-    return [];
-}
+        // Create users table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                username VARCHAR(255) PRIMARY KEY,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(50) DEFAULT 'student',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
-function saveAnnouncements(data) {
-    try {
-        fs.writeFileSync(announcementsFile, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-        console.error('Error saving announcements:', e.message);
-    }
-}
+        // Create announcements table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS announcements (
+                id VARCHAR(255) PRIMARY KEY,
+                title VARCHAR(500),
+                body TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
-function loadLoans() {
-    try {
-        if (fs.existsSync(loansFile)) {
-            return JSON.parse(fs.readFileSync(loansFile, 'utf8'));
-        }
-    } catch (e) {
-        console.error('Error loading loans:', e.message);
-    }
-    return [];
-}
+        // Create loans table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS loans (
+                id VARCHAR(255) NOT NULL,
+                username VARCHAR(255) NOT NULL,
+                title VARCHAR(500) NOT NULL,
+                author VARCHAR(500) NOT NULL,
+                borrowed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                end_date TIMESTAMP NOT NULL,
+                PRIMARY KEY (id, username)
+            );
+        `);
 
-function saveLoans(data) {
-    try {
-        fs.writeFileSync(loansFile, JSON.stringify(data, null, 2), 'utf8');
+        console.log('✓ Database tables initialized');
     } catch (e) {
-        console.error('Error saving loans:', e.message);
+        console.error('Error initializing database:', e.message);
+    } finally {
+        client.release();
     }
 }
 
-// Load all data at startup
-let users = loadUsers();
-let announcements = loadAnnouncements();
-let loans = loadLoans();
-
-console.log('⚠ Using file-based storage in ./data directory');
-console.log('⚠ Data will NOT persist across container restarts on Railway');
-console.log('To persist data permanently, add PostgreSQL addon to Railway and set DATABASE_URL environment variable');
+// Initialize on startup
+initializeDatabase();
 
 // API Routes
 
@@ -97,94 +74,118 @@ console.log('To persist data permanently, add PostgreSQL addon to Railway and se
 app.get('/api/version', (req, res) => {
     res.json({
         version: '0.0.1',
-        builtAt: new Date().toISOString()
+        builtAt: new Date().toISOString(),
+        storage: 'PostgreSQL'
     });
 });
 
 // GET /api/debug/status - check storage status
-app.get('/api/debug/status', (req, res) => {
-    res.json({
-        status: 'OK',
-        storage: 'File-based (/tmp)',
-        usersCount: Object.keys(users).length,
-        announcementsCount: announcements.length
-    });
+app.get('/api/debug/status', async (req, res) => {
+    try {
+        const users = await pool.query('SELECT COUNT(*) as count FROM users');
+        const announcements = await pool.query('SELECT COUNT(*) as count FROM announcements');
+        res.json({
+            status: 'OK',
+            storage: 'PostgreSQL',
+            usersCount: parseInt(users.rows[0].count),
+            announcementsCount: parseInt(announcements.rows[0].count)
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // GET /api/debug/users - debug endpoint to see all users
-app.get('/api/debug/users', (req, res) => {
-    const usersInfo = Object.entries(users).map(([username, user]) => ({
-        username,
-        role: user.role,
-        createdAt: user.createdAt
-    }));
-    res.json({ users: usersInfo, usersCount: usersInfo.length });
+app.get('/api/debug/users', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT username, role, created_at FROM users ORDER BY created_at DESC'
+        );
+        res.json({ users: result.rows, usersCount: result.rows.length });
+    } catch (e) {
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // GET /api/debug/reset - reset all data
-app.get('/api/debug/reset', (req, res) => {
-    users = {};
-    announcements = [];
-    loans = [];
-    saveUsers(users);
-    saveAnnouncements(announcements);
-    saveLoans(loans);
-    res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
+app.get('/api/debug/reset', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM loans');
+        await pool.query('DELETE FROM announcements');
+        await pool.query('DELETE FROM users');
+        res.json({ message: 'All data cleared. Create a fresh DreamSeak account.' });
+    } catch (e) {
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // POST /api/account/create - create a new user account
-app.post('/api/account/create', (req, res) => {
+app.post('/api/account/create', async (req, res) => {
     let { username, password } = req.body;
     
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password required' });
     }
     
-    username = username.toLowerCase();  // Normalize to lowercase
+    username = username.toLowerCase();
     
-    if (users[username]) {
-        return res.status(409).json({ error: 'User already exists' });
+    try {
+        // Check if user already exists
+        const existing = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: 'User already exists' });
+        }
+        
+        // Only DreamSeak gets admin role, everyone else is student
+        const role = username === 'dreamseak' ? 'admin' : 'student';
+        
+        await pool.query(
+            'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+            [username, password, role]
+        );
+        
+        console.log(`✓ Created account: ${username} with role: ${role}`);
+        res.json({ success: true, message: 'Account created', role });
+    } catch (e) {
+        console.error('Error creating account:', e);
+        res.status(500).json({ error: 'Database error' });
     }
-    
-    // Only DreamSeak gets admin role, everyone else is student
-    const role = username === 'dreamseak' ? 'admin' : 'student';
-    const createdAt = new Date().toISOString();
-    
-    console.log(`✓ Creating account: ${username} with role: ${role}`);
-    
-    users[username] = { password, role, createdAt };
-    saveUsers(users);
-    
-    res.json({ success: true, message: 'Account created', role });
 });
 
 // POST /api/account/login - authenticate and login user
-app.post('/api/account/login', (req, res) => {
+app.post('/api/account/login', async (req, res) => {
     let { username, password } = req.body;
     
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password required' });
     }
     
-    username = username.toLowerCase();  // Normalize to lowercase
-    const user = users[username];
+    username = username.toLowerCase();
     
-    if (!user || user.password !== password) {
-        return res.status(401).json({ error: 'Invalid username or password' });
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        
+        if (result.rows.length === 0 || result.rows[0].password !== password) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+        }
+        
+        const user = result.rows[0];
+        console.log(`✓ Login: ${username} has role: ${user.role}`);
+        
+        res.json({
+            success: true,
+            username,
+            role: user.role || 'student',
+            message: 'Login successful'
+        });
+    } catch (e) {
+        console.error('Error during login:', e);
+        res.status(500).json({ error: 'Database error' });
     }
-    
-    console.log(`✓ Login: ${username} has role: ${user.role}`);
-    
-    res.json({
-        success: true,
-        username,
-        role: user.role || 'student',
-        message: 'Login successful'
-    });
 });
 
 // GET /api/account/me - get current user's info
-app.get('/api/account/me', (req, res) => {
+app.get('/api/account/me', async (req, res) => {
     let username = req.query.username || req.body?.username;
     
     if (!username) {
@@ -192,32 +193,41 @@ app.get('/api/account/me', (req, res) => {
     }
     
     username = username.toLowerCase();
-    const user = users[username];
     
-    if (!user) {
-        console.log(`User not found: ${username}. Available users:`, Object.keys(users));
-        return res.status(404).json({ error: 'User not found' });
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        
+        if (result.rows.length === 0) {
+            console.log(`User not found: ${username}`);
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = result.rows[0];
+        res.json({
+            username,
+            role: user.role || 'student',
+            createdAt: user.created_at
+        });
+    } catch (e) {
+        console.error('Error fetching user:', e);
+        res.status(500).json({ error: 'Database error' });
     }
-    
-    res.json({
-        username,
-        role: user.role || 'student',
-        createdAt: user.createdAt
-    });
 });
 
 // GET /api/accounts - get all user accounts
-app.get('/api/accounts', (req, res) => {
-    const accounts = Object.entries(users).map(([username, user]) => ({
-        username,
-        role: user.role || 'student',
-        createdAt: user.createdAt
-    }));
-    res.json({ accounts });
+app.get('/api/accounts', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT username, role, created_at as "createdAt" FROM users ORDER BY created_at DESC'
+        );
+        res.json({ accounts: result.rows });
+    } catch (e) {
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // PUT /api/account/:username/role - update user role
-app.put('/api/account/:username/role', (req, res) => {
+app.put('/api/account/:username/role', async (req, res) => {
     let { username } = req.params;
     const { role } = req.body;
     
@@ -227,22 +237,35 @@ app.put('/api/account/:username/role', (req, res) => {
     
     username = username.toLowerCase();
     
-    if (!users[username]) {
-        return res.status(404).json({ error: 'User not found' });
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        await pool.query('UPDATE users SET role = $1 WHERE username = $2', [role, username]);
+        res.json({ success: true, message: 'Role updated' });
+    } catch (e) {
+        console.error('Error updating role:', e);
+        res.status(500).json({ error: 'Database error' });
     }
-    
-    users[username].role = role;
-    saveUsers(users);
-    res.json({ success: true, message: 'Role updated' });
 });
 
 // GET /api/announcements - get all announcements
-app.get('/api/announcements', (req, res) => {
-    res.json({ announcements });
+app.get('/api/announcements', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, title, body, created_at FROM announcements ORDER BY created_at DESC'
+        );
+        res.json({ announcements: result.rows });
+    } catch (e) {
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // POST /api/announcements - create announcement
-app.post('/api/announcements', (req, res) => {
+app.post('/api/announcements', async (req, res) => {
     const { title, body } = req.body;
     
     if (!title && !body) {
@@ -250,50 +273,79 @@ app.post('/api/announcements', (req, res) => {
     }
     
     const id = 'ann_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    const username = 'system';
-    const content = body || '';
-    const createdAt = new Date().toISOString();
     
-    announcements.push({ id, title: title || 'Ankündigung', body: content, created: createdAt });
-    saveAnnouncements(announcements);
-    res.json({ success: true });
+    try {
+        await pool.query(
+            'INSERT INTO announcements (id, title, body) VALUES ($1, $2, $3)',
+            [id, title || 'Ankündigung', body || '']
+        );
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error creating announcement:', e);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // DELETE /api/announcements/:id - delete announcement
-app.delete('/api/announcements/:id', (req, res) => {
+app.delete('/api/announcements/:id', async (req, res) => {
     const { id } = req.params;
-    announcements = announcements.filter(a => a.id !== id);
-    saveAnnouncements(announcements);
-    res.json({ success: true });
+    
+    try {
+        await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error deleting announcement:', e);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // GET /api/loans - get all loaned books
-app.get('/api/loans', (req, res) => {
-    res.json({ loans });
+app.get('/api/loans', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, username, title, author, borrowed_at as "borrowedAt", end_date as "endDate" FROM loans ORDER BY borrowed_at DESC'
+        );
+        res.json({ loans: result.rows });
+    } catch (e) {
+        console.error('Error fetching loans:', e);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // POST /api/loans - create loan record
-app.post('/api/loans', (req, res) => {
+app.post('/api/loans', async (req, res) => {
     const { id, username, title, author } = req.body;
     
     if (!id || !username || !title || !author) {
         return res.status(400).json({ error: 'All fields required' });
     }
     
-    const borrowedAt = new Date().toISOString();
     // Set end date to 2 weeks from now
-    const endDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    loans.push({ id, username: username.toLowerCase(), title, author, borrowedAt, endDate });
-    saveLoans(loans);
-    res.json({ success: true });
+    const endDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    
+    try {
+        await pool.query(
+            'INSERT INTO loans (id, username, title, author, end_date) VALUES ($1, $2, $3, $4, $5)',
+            [id, username.toLowerCase(), title, author, endDate]
+        );
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error creating loan:', e);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // DELETE /api/loans/:id - return loaned book
-app.delete('/api/loans/:id', (req, res) => {
+app.delete('/api/loans/:id', async (req, res) => {
     const { id } = req.params;
-    loans = loans.filter(l => l.id !== id);
-    saveLoans(loans);
-    res.json({ success: true });
+    
+    try {
+        await pool.query('DELETE FROM loans WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error deleting loan:', e);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // Serve static files (frontend) from parent directory
@@ -308,6 +360,5 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✓ Server running on port ${PORT}`);
-    console.log(`Data stored at: ${dataDir}`);
+    console.log('✓ Using PostgreSQL for persistent storage');
 });
-
